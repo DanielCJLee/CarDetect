@@ -13,17 +13,18 @@ EPSILON = np.finfo(np.double).eps
 
 frame = 50 # length of frame in milliseconds
 divisions = np.array([40,70,110,150,200,250,300,400,500,750,1000,1500,2000,3000,5000,11025])
+#divisions = np.array([1000,1500,2000,2500,3000,3500,4000,5000,7000,10000])
 moving_average_length = 50 # length in number of FFTs
 
 def nextpow2(num):
     return int(np.ceil(np.log2(num)))
     
-def spect_plot(bins, freqs, power, logscale = True):
+def spect_plot(bins, freqs, power, logscale = True, axes=plt):
     if logscale:
         z = np.log10(power)
     else:
         z = power
-    plt.pcolormesh(bins, freqs, z)
+    axes.pcolormesh(bins, freqs, z)
 
 def find_indexes(freqs, divisions):
     # Determine where the divisions are in the freqs list
@@ -112,9 +113,22 @@ def trim_outliers(data, num_std_devs = 3):
     print "# low", num_low
     print "# total", count
     return output
+
+def rolloff_freq(power):
+    p = power.T
+    # TODO: implement rolloff freq algorithm
+
+def avg_zero_crossing_rate(data):
+    signs = np.sign(np.array(data))
+    total = 0
+    for i in xrange(1, len(signs)):
+        if signs[i-1] != signs[i]:
+            total += 1
+    rate = float(total) / len(data)
+    return rate
     
 def main():
-    rate, data = wavfile.read('./recordings/carNight2.wav')
+    rate, data = wavfile.read('./recordings/highway4cars.wav')
     print "Sound file loaded"
 
     framelen_samples = int(float(frame) / float(1000) * float(rate))
@@ -139,15 +153,29 @@ def main():
     #spect_plot(ax1, bins, freqs, p3)
     
     # Divide into useful frequency bins
-    p3 = freq_bins(freqs, p3, divisions)
-    freqs = divisions
+    #p3 = freq_bins(freqs, p3, divisions)
+    #freqs = divisions
     
     # Find differences from the moving average (filters out some background noise)
-    differences = np.absolute(p3 - full_moving_average(p3))
-    differences[differences==0] = EPSILON # remove zero values
+    differences = abs(p3 - full_moving_average(p3))
+    differences[differences==0] = EPSILON # replace zero values with small number
+    
+    differences = trim_outliers(differences, num_std_devs=3)
     
     # Plot
-    spect_plot(bins, freqs, trim_outliers(differences, num_std_devs=3), logscale = True)
+    fig, (ax1, ax2) = plt.subplots(2)
+    spect_plot(bins, freqs, differences, logscale = True, axes=ax1)
+    #plt.show()
+    
+    # Plot zero-crossing rate in intervals of the FFT window
+    sample_size = int((float(frame) / 1000) * rate)
+    x = []
+    y = []
+    num = int(len(data) / sample_size)
+    for i in xrange(num):
+        x.append((i+1) * frame)
+        y.append(avg_zero_crossing_rate(data[i*sample_size:(i+1)*sample_size]))
+    ax2.plot(x,y)
     
     plt.show()
 
