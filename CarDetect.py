@@ -114,9 +114,18 @@ def trim_outliers(data, num_std_devs = 3):
     print "# total", count
     return output
 
-def rolloff_freq(power):
-    p = power.T
-    # TODO: implement rolloff freq algorithm
+def rolloff_freq(timeslice, threshold=0.90):
+    target = threshold * sum(timeslice)
+    partial = 0.0
+    i = 0
+    length = len(timeslice)
+    while partial < target and i < length-1:
+        partial += timeslice[i]
+        i += 1
+    return i
+
+def graph_rolloff_freq(freqs, power):
+    return [freqs[rolloff_freq(x)] for x in power.T]
 
 def avg_zero_crossing_rate(data):
     signs = np.sign(np.array(data))
@@ -126,9 +135,16 @@ def avg_zero_crossing_rate(data):
             total += 1
     rate = float(total) / len(data)
     return rate
-    
+
+def normalize(power):
+    p = power.T
+    output = []
+    for row in p:
+        output.append(row / np.average(row))
+    return np.array(output).T
+
 def main():
-    rate, data = wavfile.read('./recordings/highway4cars.wav')
+    rate, data = wavfile.read('./recordings/car2.wav')
     print "Sound file loaded"
 
     framelen_samples = int(float(frame) / float(1000) * float(rate))
@@ -149,12 +165,14 @@ def main():
 
     p3 = np.array(p3).transpose()
     
+    #p3 = normalize(p3)
+    
     #spect_plot(ax1, bins, np.array(divisions), freq_bins(freqs, p3, divisions))
     #spect_plot(ax1, bins, freqs, p3)
     
     # Divide into useful frequency bins
-    #p3 = freq_bins(freqs, p3, divisions)
-    #freqs = divisions
+    p3 = freq_bins(freqs, p3, divisions)
+    freqs = divisions
     
     # Find differences from the moving average (filters out some background noise)
     differences = abs(p3 - full_moving_average(p3))
@@ -163,7 +181,7 @@ def main():
     differences = trim_outliers(differences, num_std_devs=3)
     
     # Plot
-    fig, (ax1, ax2) = plt.subplots(2)
+    fig, (ax1, ax2, ax3) = plt.subplots(3)
     spect_plot(bins, freqs, differences, logscale = True, axes=ax1)
     #plt.show()
     
@@ -176,6 +194,9 @@ def main():
         x.append((i+1) * frame)
         y.append(avg_zero_crossing_rate(data[i*sample_size:(i+1)*sample_size]))
     ax2.plot(x,y)
+    
+    # Plot rolloff frequency
+    ax3.plot(bins, graph_rolloff_freq(freqs, p3))
     
     plt.show()
 
