@@ -39,7 +39,6 @@ class Analyzer:
         self.noverlap = int(0.3 * self.framelen_samples)
         self.NFFT = 2 ** self.nextpow2(self.framelen_samples)
         self.audio_buffer = DataBuffer(maxlength=self.NFFT*LONG_TERM_MOVING_AVERAGE_LENGTH)
-        self.zero_crossing_rate_buffer = DataBuffer(maxlength=self.NFFT)
 
     def nextpow2(self, num):
         return int(np.ceil(np.log2(num)))
@@ -137,7 +136,7 @@ class Analyzer:
         print "# total", count
         return output
 
-    def rolloff_freq(self, slice, threshold=0.90):
+    def slice_rolloff_freq(self, slice, threshold=0.90):
         target = threshold * sum(slice)
         partial = 0.0
         i = 0
@@ -147,8 +146,8 @@ class Analyzer:
             i += 1
         return i
 
-    def graph_rolloff_freq(self, freqs, slices):
-        return [freqs[self.rolloff_freq(x)] for x in slices]
+    def all_rolloff_freq(self, freqs, slices):
+        return [freqs[self.slice_rolloff_freq(x)] for x in slices]
 
     def avg_zero_crossing_rate(self, sound_data):
         signs = np.sign(np.array(sound_data))
@@ -163,38 +162,37 @@ class Analyzer:
         output = []
         for slice in slices:
             output.append(slice / np.average(slice))
-        return np.array(output).T
+        return np.array(output)
 
-    def run(self):
+    def update(self):
         (power, freqs, bins, im) = plt.specgram(x=self.audio_buffer.data, NFFT=self.NFFT, Fs=self.rate, noverlap=self.noverlap)
         print "Computed spectrogram"
 
         slices = power.T
-
-        # Divide into useful frequency bins
-        #p3 = freq_bins(freqs, slices, divisions)
-        #freqs = divisions
 
         # Normalize the slices for analysis purposes
         slices = abs(slices - self.moving_average(slices))  # subtract the baseline (long-term moving average)
         slices[slices == 0] = EPSILON  # replace zero values with small number to prevent invalid logarithm
         slices = self.trim_outliers(slices)  # trim outliers from data
 
-        fig, (ax1, ax2, ax3) = plt.subplots(3)
-
-        # Calculate zero-crossing rate (in intervals of the FFT window)
-        x = []
-        y = []
+        # Calculate zero-crossing rates (in intervals of the FFT window)
+        zero_crossing_rates = []
         num = int(len(self.audio_buffer.data) / self.NFFT)
         for i in xrange(num):
-            x.append((i + 1) * FRAME_TIME_LENGTH)
-            y.append(self.avg_zero_crossing_rate(self.data[i * self.NFFT:(i + 1) * self.NFFT]))
-        ax2.plot(x, y)
+            zero_crossing_rates.append(self.avg_zero_crossing_rate(self.audio_buffer.data[i * self.NFFT:(i + 1) * self.NFFT]))
+        zero_crossing_rates = np.array(zero_crossing_rates)
 
-        # Plot rolloff frequency
-        ax3.plot(bins, self.graph_rolloff_freq(freqs, slices))
+        # Calculate rolloff frequencies
+        rolloff_freqs = self.all_rolloff_freq(freqs, slices)
+        rolloff_freqs = np.array(rolloff_freqs)
 
-        plt.show()
+        # Divide each slice into frequency bins
+        slices_bins = self.freq_bins(freqs, slices, DIVISIONS)
+
+        return slices, zero_crossing_rates, rolloff_freqs, slices_bins
 
     def push(self, piece):
         self.audio_buffer.push(piece)
+
+    def extract_feature_vector(self):
+        pass
