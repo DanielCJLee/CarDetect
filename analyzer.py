@@ -11,10 +11,10 @@ import matplotlib.pyplot as plt
 
 EPSILON = np.finfo(np.double).eps
 
-FRAME_TIME_LENGTH = 50 # length of frame in milliseconds
-DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
-#DIVISIONS = np.array([1000,1500,2000,2500,3000,3500,4000,5000,7000,10000])
-LONG_TERM_MOVING_AVERAGE_LENGTH = 2000 / FRAME_TIME_LENGTH # length in number of FFTs
+FRAME_TIME_LENGTH = 50  # length of frame in milliseconds
+#DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
+DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
+LONG_TERM_MOVING_AVERAGE_LENGTH = 2000 / FRAME_TIME_LENGTH  # length in number of FFTs
 SHORT_TERM_MOVING_AVERAGE_LENGTH = 500 / FRAME_TIME_LENGTH
 
 
@@ -40,12 +40,12 @@ class AudioBuffer:
         """
         length = len(self.data)
         if length < self.fft_sample_length:
-            return []
+            return False
         else:
-            count = int(length / self.step)
-            output_length = self.fft_sample_length + count*self.step
-            output = self.data[:output_length+1]
-            self.data = self.data[output_length+1:]
+            count = int((length-self.fft_sample_length) / self.step)
+            output_length = self.fft_sample_length + count * self.step
+            output = self.data[:output_length + 1]
+            self.data = self.data[output_length + 1:]
             return output
 
 
@@ -77,6 +77,7 @@ class Analyzer:
         self.audio_buffer = AudioBuffer(fft_sample_length=self.fft_sample_length,
                                         overlap_sample_length=self.overlap_sample_length)
         self.buffers = {
+            "raw_slices": DataBuffer(),
             "slices": DataBuffer(),
             "zero_crossing_rates": DataBuffer(),
             "rolloff_freqs": DataBuffer(),
@@ -129,14 +130,16 @@ class Analyzer:
 
         return output
 
-    def moving_average(self, slices):
+    def moving_average(self, number):
+        slices = self.buffers["raw_slices"].data
         averages = []
-        for end in xrange(len(slices)):
+        length = len(slices)
+        for end in xrange(length-number, length):
             start = max(0, end - LONG_TERM_MOVING_AVERAGE_LENGTH - 1)
             actual_length = end - start + 1
             average = sum(slices[start:end + 1]) / actual_length
             # note there is some imprecision in using integer instead of float math
-            # but this is also faster, and easier to implement
+            # but this is faster, and easier to implement
             averages.append(average)
         averages = np.array(averages)
         return averages
@@ -210,13 +213,46 @@ class Analyzer:
     def _step_length(self):
         return self.fft_sample_length - self.overlap_sample_length
 
+    def high_pass_filter(self, slices, freqs, cutoff_frequency):
+        """
+        Zeros the frequencies below the specified frequency
+        (or the next lowest present)
+        and returns the remaining higher frequencies.
+        :param slices:
+        """
+        # Find the index to cut off at
+        index = 0
+        length = len(freqs)
+        while freqs[index] < cutoff_frequency and index < length - 1:
+            index += 1
+
+        # Perform the filtering
+        output = []
+
+        for slice in slices:
+            new_slice = [EPSILON] * index
+            new_slice.extend(list(slice[index:]))
+            output.append(new_slice)
+
+        output = np.array(output)
+        return output
+
     def update(self, data):
-        (Pxx, freqs, t) = mlab.specgram(x=data, NFFT=self.fft_sample_length, Fs=self.rate, noverlap=self.overlap_sample_length)
+        """
+
+        :param data:
+        :return:
+        """
+        (Pxx, freqs, t) = mlab.specgram(x=data, NFFT=self.fft_sample_length, Fs=self.rate,
+                                        noverlap=self.overlap_sample_length)
 
         slices = Pxx.T  # transpose the power matrix into time slices
 
+        # Add raw slices to buffer for use in calculating moving average
+        self.buffers["raw_slices"].push_multiple(slices)
+
         # Normalize the slices for analysis purposes
-        slices = abs(slices - self.moving_average(slices))  # subtract the baseline (long-term moving average)
+        slices = abs(slices - self.moving_average(len(slices)))  # subtract the baseline (long-term moving average)
         slices[slices == 0] = EPSILON  # replace zero values with small number to prevent invalid logarithm
         slices = self.trim_outliers(slices)  # trim outliers from data
 
@@ -229,13 +265,17 @@ class Analyzer:
             section = data[i * self._step_length():(i + 1) * self._step_length()]
             zero_crossing_rates.append(self.avg_zero_crossing_rate(section))
 
-        # Calculate rolloff frequencies
-        rolloff_freqs = self.all_rolloff_freq(freqs, slices)
+        # Calculate rolloff frequencies, with high-pass filter
+        filtered_slices = self.high_pass_filter(slices, freqs, 500)
+        rolloff_freqs = self.all_rolloff_freq(freqs, filtered_slices)
 
         # Divide each slice into frequency bins
         slices_bins = self.freq_bins(freqs, slices, DIVISIONS)
 
-        # Push to data buffers
+        # Analyze the third octave (currently the combination of the second and third bins)
+        third_octave = [sum(slice[1:3]) for slice in slices_bins]
+
+        # Push processed data to data buffers
         self.buffers["slices"].push_multiple(slices)
         self.buffers["zero_crossing_rates"].push_multiple(zero_crossing_rates)
         self.buffers["rolloff_freqs"].push_multiple(rolloff_freqs)
@@ -246,7 +286,8 @@ class Analyzer:
     def push(self, samples):
         self.audio_buffer.push(samples)
         data = self.audio_buffer.pop_working_set()
-        return self.update(data)
+        if data:
+            return self.update(data)
 
-    def extract_feature_vector(self):
+    def get_feature_vector(self):
         pass
