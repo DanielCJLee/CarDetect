@@ -42,7 +42,7 @@ class AudioBuffer:
         if length < self.fft_sample_length:
             return False
         else:
-            count = int((length-self.fft_sample_length) / self.step)
+            count = int((length - self.fft_sample_length) / self.step)
             output_length = self.fft_sample_length + count * self.step
             output = self.data[:output_length + 1]
             self.data = self.data[output_length + 1:]
@@ -136,7 +136,7 @@ class Analyzer:
         slices = self.buffers["raw_slices"].data
         averages = []
         length = len(slices)
-        for end in xrange(length-number, length):
+        for end in xrange(length - number, length):
             start = max(0, end - LONG_TERM_MOVING_AVERAGE_LENGTH - 1)
             actual_length = end - start + 1
             average = sum(slices[start:end + 1]) / actual_length
@@ -290,6 +290,21 @@ class Analyzer:
         data = self.audio_buffer.pop_working_set()
         if data:
             return self.update(data)
+
+    def display(self):
+        fig, axes = plt.subplots(len(self.buffers))
+        i = 0
+        for name in self.buffers.keys():
+            print name
+            buffer_data = self.buffers[name].data
+            if type(buffer_data[0]) is np.ndarray:
+                # print as spectrogram
+                self.plot_spectrogram(np.array(range(len(buffer_data))), np.array(range(len(buffer_data[0]))), np.array(buffer_data), axes=axes[i])
+            else:
+                # plot as standard (x,y)
+                axes[i].plot(range(len(buffer_data)), buffer_data)
+            i += 1
+        plt.show()
 
     def get_feature_vector(self):
         pass

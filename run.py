@@ -20,3 +20,4 @@ if __name__ == '__main__':
     for samples in virtual_buffer(data, BUFFER_SIZE):
         analyzer.push(samples)
     print "Finished in", datetime.now() - start_time, "seconds"
+    analyzer.display()
