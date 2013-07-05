@@ -3,12 +3,10 @@ Created on Jul 3, 2013
 
 @author: Zachary
 """
+from matplotlib import mlab
 
 import numpy as np
 import matplotlib.pyplot as plt
-from numpy.lib.function_base import average
-from scipy.io import wavfile
-from datetime import datetime
 
 
 EPSILON = np.finfo(np.double).eps
@@ -21,24 +19,24 @@ SHORT_TERM_MOVING_AVERAGE_LENGTH = 500 / FRAME_TIME_LENGTH
 
 
 class DataBuffer:
-    def __init__(self, maxlength):
+    def __init__(self, trimlength):
         self.data = []
-        self.maxlength = maxlength
+        self.trimlength = trimlength
 
     def push(self, piece):
         self.data.extend(piece)
         length = len(self.data)
-        if length > self.maxlength:
-            self.data = self.data[length - self.maxlength:]
+        if length > self.trimlength:
+            self.data = self.data[length - self.trimlength:]
 
 
 class Analyzer:
     def __init__(self, rate):
         self.rate = rate
-        self.framelen_samples = int(float(FRAME_TIME_LENGTH) / float(1000) * float(self.rate))
-        self.noverlap = int(0.3 * self.framelen_samples)
-        self.NFFT = 2 ** self.nextpow2(self.framelen_samples)
-        self.audio_buffer = DataBuffer(maxlength=self.NFFT*LONG_TERM_MOVING_AVERAGE_LENGTH)
+        frame_samples_length = int(float(FRAME_TIME_LENGTH) / float(1000) * float(self.rate))
+        self.overlap_sample_length = int(0.3 * frame_samples_length)
+        self.fft_sample_length = int(2 ** self.nextpow2(frame_samples_length))
+        self.audio_buffer = DataBuffer(trimlength=self.fft_sample_length*LONG_TERM_MOVING_AVERAGE_LENGTH)
 
     def nextpow2(self, num):
         return int(np.ceil(np.log2(num)))
@@ -164,22 +162,25 @@ class Analyzer:
             output.append(slice / np.average(slice))
         return np.array(output)
 
+    def block_interval(self):
+        return self.fft_sample_length - self.overlap_sample_length
+
     def update(self):
-        (power, freqs, bins, im) = plt.specgram(x=self.audio_buffer.data, NFFT=self.NFFT, Fs=self.rate, noverlap=self.noverlap)
+        (Pxx, freqs, t) = mlab.specgram(x=self.audio_buffer.data, NFFT=self.fft_sample_length, Fs=self.rate, noverlap=self.overlap_sample_length)
         print "Computed spectrogram"
 
-        slices = power.T
+        slices = Pxx.T
 
         # Normalize the slices for analysis purposes
         slices = abs(slices - self.moving_average(slices))  # subtract the baseline (long-term moving average)
         slices[slices == 0] = EPSILON  # replace zero values with small number to prevent invalid logarithm
         slices = self.trim_outliers(slices)  # trim outliers from data
 
-        # Calculate zero-crossing rates (in intervals of the FFT window)
+        # Calculate zero-crossing rates (in intervals of the FFT block interval)
         zero_crossing_rates = []
-        num = int(len(self.audio_buffer.data) / self.NFFT)
+        num = int(len(self.audio_buffer.data) / self.block_interval())
         for i in xrange(num):
-            zero_crossing_rates.append(self.avg_zero_crossing_rate(self.audio_buffer.data[i * self.NFFT:(i + 1) * self.NFFT]))
+            zero_crossing_rates.append(self.avg_zero_crossing_rate(self.audio_buffer.data[i * self.block_interval():(i + 1) * self.block_interval()]))
         zero_crossing_rates = np.array(zero_crossing_rates)
 
         # Calculate rolloff frequencies
