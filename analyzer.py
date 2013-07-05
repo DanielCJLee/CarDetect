@@ -18,25 +18,70 @@ LONG_TERM_MOVING_AVERAGE_LENGTH = 2000 / FRAME_TIME_LENGTH # length in number of
 SHORT_TERM_MOVING_AVERAGE_LENGTH = 500 / FRAME_TIME_LENGTH
 
 
-class DataBuffer:
-    def __init__(self, trimlength):
+class AudioBuffer:
+    def __init__(self, fft_sample_length, overlap_sample_length):
         self.data = []
-        self.trimlength = trimlength
+        self.fft_sample_length = fft_sample_length
+        self.overlap_sample_length = overlap_sample_length
+        self.step = fft_sample_length - overlap_sample_length
 
-    def push(self, piece):
-        self.data.extend(piece)
+    def push(self, samples):
+        """
+        Adds elements in piece argument to end of buffer data.
+        :param samples:
+        """
+        self.data.extend(samples)
+
+    def pop_working_set(self):
+        """
+        Returns a piece of the data for then performing FFT analysis.
+        Keeps the remainder of the data beyond the FFT sample interval.
+        :rtype : list
+        """
         length = len(self.data)
-        if length > self.trimlength:
-            self.data = self.data[length - self.trimlength:]
+        if length < self.fft_sample_length:
+            return []
+        else:
+            count = int(length / self.step)
+            output_length = self.fft_sample_length + count*self.step
+            output = self.data[:output_length+1]
+            self.data = self.data[output_length+1:]
+            return output
+
+
+class DataBuffer:
+    def __init__(self, length=1000):
+        self.length = length
+        self.data = []
+
+    def push(self, item):
+        self.data.append(item)
+        self._trim()
+
+    def push_multiple(self, items):
+        self.data.extend(items)
+        self._trim()
+
+    def _trim(self):
+        length = len(self.data)
+        if length > self.length:
+            self.data = self.data[length - self.length:]
 
 
 class Analyzer:
     def __init__(self, rate):
         self.rate = rate
         frame_samples_length = int(float(FRAME_TIME_LENGTH) / float(1000) * float(self.rate))
-        self.overlap_sample_length = int(0.3 * frame_samples_length)
         self.fft_sample_length = int(2 ** self.nextpow2(frame_samples_length))
-        self.audio_buffer = DataBuffer(trimlength=self.fft_sample_length*LONG_TERM_MOVING_AVERAGE_LENGTH)
+        self.overlap_sample_length = int(0.3 * frame_samples_length)
+        self.audio_buffer = AudioBuffer(fft_sample_length=self.fft_sample_length,
+                                        overlap_sample_length=self.overlap_sample_length)
+        self.buffers = {
+            "slices": DataBuffer(),
+            "zero_crossing_rates": DataBuffer(),
+            "rolloff_freqs": DataBuffer(),
+            "slices_bins": DataBuffer()
+        }
 
     def nextpow2(self, num):
         return int(np.ceil(np.log2(num)))
@@ -113,7 +158,7 @@ class Analyzer:
         lower_bound = 10 ** lower_bound10
         upper_bound = 10 ** upper_bound10
 
-        print upper_bound10, lower_bound10
+        # print upper_bound10, lower_bound10
 
         num_high = 0
         num_low = 0
@@ -129,9 +174,9 @@ class Analyzer:
                 num_low += 1
             count += 1
 
-        print "# high", num_high
-        print "# low", num_low
-        print "# total", count
+        # print "# high", num_high
+        # print "# low", num_low
+        # print "# total", count
         return output
 
     def slice_rolloff_freq(self, slice, threshold=0.90):
@@ -162,14 +207,13 @@ class Analyzer:
             output.append(slice / np.average(slice))
         return np.array(output)
 
-    def block_interval(self):
+    def _step_length(self):
         return self.fft_sample_length - self.overlap_sample_length
 
-    def update(self):
-        (Pxx, freqs, t) = mlab.specgram(x=self.audio_buffer.data, NFFT=self.fft_sample_length, Fs=self.rate, noverlap=self.overlap_sample_length)
-        print "Computed spectrogram"
+    def update(self, data):
+        (Pxx, freqs, t) = mlab.specgram(x=data, NFFT=self.fft_sample_length, Fs=self.rate, noverlap=self.overlap_sample_length)
 
-        slices = Pxx.T
+        slices = Pxx.T  # transpose the power matrix into time slices
 
         # Normalize the slices for analysis purposes
         slices = abs(slices - self.moving_average(slices))  # subtract the baseline (long-term moving average)
@@ -177,23 +221,32 @@ class Analyzer:
         slices = self.trim_outliers(slices)  # trim outliers from data
 
         # Calculate zero-crossing rates (in intervals of the FFT block interval)
+        # Note that this isn't perfect, since the FFT itself has overlaps,
+        # so the intervals do not correspond exactly
         zero_crossing_rates = []
-        num = int(len(self.audio_buffer.data) / self.block_interval())
+        num = int(len(data) / self._step_length())
         for i in xrange(num):
-            zero_crossing_rates.append(self.avg_zero_crossing_rate(self.audio_buffer.data[i * self.block_interval():(i + 1) * self.block_interval()]))
-        zero_crossing_rates = np.array(zero_crossing_rates)
+            section = data[i * self._step_length():(i + 1) * self._step_length()]
+            zero_crossing_rates.append(self.avg_zero_crossing_rate(section))
 
         # Calculate rolloff frequencies
         rolloff_freqs = self.all_rolloff_freq(freqs, slices)
-        rolloff_freqs = np.array(rolloff_freqs)
 
         # Divide each slice into frequency bins
         slices_bins = self.freq_bins(freqs, slices, DIVISIONS)
 
+        # Push to data buffers
+        self.buffers["slices"].push_multiple(slices)
+        self.buffers["zero_crossing_rates"].push_multiple(zero_crossing_rates)
+        self.buffers["rolloff_freqs"].push_multiple(rolloff_freqs)
+        self.buffers["slices_bins"].push_multiple(slices_bins)
+
         return slices, zero_crossing_rates, rolloff_freqs, slices_bins
 
-    def push(self, piece):
-        self.audio_buffer.push(piece)
+    def push(self, samples):
+        self.audio_buffer.push(samples)
+        data = self.audio_buffer.pop_working_set()
+        return self.update(data)
 
     def extract_feature_vector(self):
         pass

@@ -1,3 +1,4 @@
+from datetime import datetime
 import sys
 from scipy.io import wavfile
 from analyzer import Analyzer
@@ -11,8 +12,11 @@ def virtual_buffer(data, length):
 
 
 if __name__ == '__main__':
-    rate, data = wavfile.read(sys.argv[1])
+    filename = sys.argv[1]
+    print "Processing file", filename
+    rate, data = wavfile.read(filename)
     analyzer = Analyzer(rate)
-    for piece in virtual_buffer(data, BUFFER_SIZE):
-        analyzer.push(piece)
-        analyzer.update()
+    start_time = datetime.now()
+    for samples in virtual_buffer(data, BUFFER_SIZE):
+        analyzer.push(samples)
+    print "Finished in", datetime.now() - start_time, "seconds"
