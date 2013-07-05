@@ -76,13 +76,15 @@ class Analyzer:
         self.overlap_sample_length = int(0.3 * frame_samples_length)
         self.audio_buffer = AudioBuffer(fft_sample_length=self.fft_sample_length,
                                         overlap_sample_length=self.overlap_sample_length)
-        self.buffers = {
-            "raw_slices": DataBuffer(),
-            "slices": DataBuffer(),
-            "zero_crossing_rates": DataBuffer(),
-            "rolloff_freqs": DataBuffer(),
-            "slices_bins": DataBuffer()
-        }
+        # self.buffers = {
+        #     "raw_slices": DataBuffer(),
+        #     "slices": DataBuffer(),
+        #     "zero_crossing_rates": DataBuffer(),
+        #     "rolloff_freqs": DataBuffer(),
+        #     "slices_bins": DataBuffer()
+        # }
+        self.buffers = {name: DataBuffer() for name in
+                        ["raw_slices", "slices", "zero_crossing_rates", "rolloff_freqs", "slices_bins", "third_octave"]}
 
     def nextpow2(self, num):
         return int(np.ceil(np.log2(num)))
@@ -126,7 +128,7 @@ class Analyzer:
             output.append(sum(power[prev_index:index + 1]))
             prev_index = index
 
-        output = np.array(output)
+        output = np.array(output).T
 
         return output
 
@@ -255,6 +257,7 @@ class Analyzer:
         slices = abs(slices - self.moving_average(len(slices)))  # subtract the baseline (long-term moving average)
         slices[slices == 0] = EPSILON  # replace zero values with small number to prevent invalid logarithm
         slices = self.trim_outliers(slices)  # trim outliers from data
+        self.buffers["slices"].push_multiple(slices)
 
         # Calculate zero-crossing rates (in intervals of the FFT block interval)
         # Note that this isn't perfect, since the FFT itself has overlaps,
@@ -264,24 +267,23 @@ class Analyzer:
         for i in xrange(num):
             section = data[i * self._step_length():(i + 1) * self._step_length()]
             zero_crossing_rates.append(self.avg_zero_crossing_rate(section))
+        self.buffers["zero_crossing_rates"].push_multiple(zero_crossing_rates)
 
         # Calculate rolloff frequencies, with high-pass filter
         filtered_slices = self.high_pass_filter(slices, freqs, 500)
         rolloff_freqs = self.all_rolloff_freq(freqs, filtered_slices)
+        self.buffers["rolloff_freqs"].push_multiple(rolloff_freqs)
 
         # Divide each slice into frequency bins
         slices_bins = self.freq_bins(freqs, slices, DIVISIONS)
-
-        # Analyze the third octave (currently the combination of the second and third bins)
-        third_octave = [sum(slice[1:3]) for slice in slices_bins]
-
-        # Push processed data to data buffers
-        self.buffers["slices"].push_multiple(slices)
-        self.buffers["zero_crossing_rates"].push_multiple(zero_crossing_rates)
-        self.buffers["rolloff_freqs"].push_multiple(rolloff_freqs)
         self.buffers["slices_bins"].push_multiple(slices_bins)
 
-        return slices, zero_crossing_rates, rolloff_freqs, slices_bins
+        # Analyze the third octave
+        third_octave_indexes = self.find_indexes(freqs, [700, 1300])
+        third_octave = [slice[third_octave_indexes[0]:third_octave_indexes[1]] for slice in slices]
+        self.buffers["third_octave"].push_multiple(third_octave)
+
+        return slices, zero_crossing_rates, rolloff_freqs, slices_bins, third_octave
 
     def push(self, samples):
         self.audio_buffer.push(samples)
