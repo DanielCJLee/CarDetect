@@ -1,8 +1,8 @@
-'''
+"""
 Created on Jul 3, 2013
 
 @author: Zachary
-'''
+"""
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,7 +14,7 @@ EPSILON = np.finfo(np.double).eps
 frame = 50 # length of frame in milliseconds
 divisions = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
 #divisions = np.array([1000,1500,2000,2500,3000,3500,4000,5000,7000,10000])
-moving_average_length = 50 # length in number of FFTs
+moving_average_length = 1000 / frame # length in number of FFTs
 
 
 def nextpow2(num):
@@ -157,7 +157,7 @@ def normalize(power):
 
 
 def main():
-    rate, data = wavfile.read('./recordings/car2.wav')
+    rate, data = wavfile.read('./recordings/carNight1.wav')
     print "Sound file loaded"
 
     framelen_samples = int(float(frame) / float(1000) * float(rate))
@@ -184,8 +184,8 @@ def main():
     #spect_plot(ax1, bins, freqs, p3)
 
     # Divide into useful frequency bins
-    p3 = freq_bins(freqs, p3, divisions)
-    freqs = divisions
+    #p3 = freq_bins(freqs, p3, divisions)
+    #freqs = divisions
 
     # Find differences from the moving average (filters out some background noise)
     differences = abs(p3 - full_moving_average(p3))
