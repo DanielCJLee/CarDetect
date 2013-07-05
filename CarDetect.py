@@ -168,16 +168,6 @@ def main():
     plt.cla()
     print "Computed spectrogram"
 
-    p2 = power.transpose()
-
-    p3 = []
-    for row in p2:
-        #s = median(row)
-        #row = row/s
-        p3.append(row)
-
-    p3 = np.array(p3).transpose()
-
     #p3 = normalize(p3)
 
     #spect_plot(ax1, bins, np.array(divisions), freq_bins(freqs, p3, divisions))
@@ -188,7 +178,7 @@ def main():
     #freqs = divisions
 
     # Find differences from the moving average (filters out some background noise)
-    differences = abs(p3 - full_moving_average(p3))
+    differences = abs(power - full_moving_average(power))
     differences[differences == 0] = EPSILON # replace zero values with small number
 
     differences = trim_outliers(differences, num_std_devs=3)
@@ -209,7 +199,7 @@ def main():
     ax2.plot(x, y)
 
     # Plot rolloff frequency
-    ax3.plot(bins, graph_rolloff_freq(freqs, p3))
+    ax3.plot(bins, graph_rolloff_freq(freqs, power))
 
     plt.show()
 
