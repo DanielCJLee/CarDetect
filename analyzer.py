@@ -97,7 +97,7 @@ class Analyzer:
         #     "rolloff_freqs": DataBuffer(),
         #     "slices_bins": DataBuffer()
         # }
-        self.buffers = {name: DataBuffer(0) for name in
+        self.buffers = {name: DataBuffer() for name in
                         ["raw_slices", "slices", "zero_crossing_rates", "rolloff_freqs", "slices_bins", "third_octave", "third_octave_autocorrelation"]}
 
         self.feature_vectors = FeatureVectorBuffer()
