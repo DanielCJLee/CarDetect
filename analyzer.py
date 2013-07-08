@@ -25,9 +25,9 @@ class AudioBuffer:
         self.overlap_sample_length = overlap_sample_length
         self.step = fft_sample_length - overlap_sample_length
 
-    def push(self, samples):
+    def push_samples(self, samples):
         """
-        Adds elements in piece argument to end of buffer data.
+        Adds samples to end of buffer data.
         :param samples:
         """
         self.data.extend(samples)
@@ -56,6 +56,7 @@ class DataBuffer:
 
     def push(self, item):
         self.data.append(item)
+        print item
         self._trim()
 
     def push_multiple(self, items):
@@ -85,6 +86,8 @@ class Analyzer:
         # }
         self.buffers = {name: DataBuffer() for name in
                         ["raw_slices", "slices", "zero_crossing_rates", "rolloff_freqs", "slices_bins", "third_octave"]}
+
+        self.feature_vectors = DataBuffer()
 
     def nextpow2(self, num):
         return int(np.ceil(np.log2(num)))
@@ -179,9 +182,7 @@ class Analyzer:
                 num_low += 1
             count += 1
 
-        # print "# high", num_high
-        # print "# low", num_low
-        # print "# total", count
+        # print "Trimmed", num_high, "high,",  num_low, "low samples out of", count
         return output
 
     def slice_rolloff_freq(self, slice, threshold=0.90):
@@ -248,24 +249,21 @@ class Analyzer:
         (Pxx, freqs, t) = mlab.specgram(x=data, NFFT=self.fft_sample_length, Fs=self.rate,
                                         noverlap=self.overlap_sample_length)
 
-        slices = Pxx.T  # transpose the power matrix into time slices
+        raw_slices = Pxx.T  # transpose the power matrix into time slices
+        n = len(raw_slices)  # number of slices in each of following sequences
 
         # Add raw slices to buffer for use in calculating moving average
-        self.buffers["raw_slices"].push_multiple(slices)
+        self.buffers["raw_slices"].push_multiple(raw_slices)
 
         # Normalize the slices for analysis purposes
-        slices = abs(slices - self.moving_average(len(slices)))  # subtract the baseline (long-term moving average)
+        slices = abs(raw_slices - self.moving_average(len(raw_slices)))  # subtract baseline long-term moving average
         slices[slices == 0] = EPSILON  # replace zero values with small number to prevent invalid logarithm
         slices = self.trim_outliers(slices)  # trim outliers from data
         self.buffers["slices"].push_multiple(slices)
 
-        # Calculate zero-crossing rates (in intervals of the FFT block interval)
-        # Note that this isn't perfect, since the FFT itself has overlaps,
-        # so the intervals do not correspond exactly
+        # Calculate zero-crossing rates (in intervals of the FFT block size, w/ overlap)
         zero_crossing_rates = []
-        num = int(len(data) / self._step_length())
-        for i in xrange(num):
-            section = data[i * self._step_length():(i + 1) * self._step_length()]
+        for section in self._raw_data_in_slices(data):
             zero_crossing_rates.append(self.avg_zero_crossing_rate(section))
         self.buffers["zero_crossing_rates"].push_multiple(zero_crossing_rates)
 
@@ -283,10 +281,22 @@ class Analyzer:
         third_octave = [slice[third_octave_indexes[0]:third_octave_indexes[1]] for slice in slices]
         self.buffers["third_octave"].push_multiple(third_octave)
 
-        return slices, zero_crossing_rates, rolloff_freqs, slices_bins, third_octave
+        # Create feature vectors
+        for i in xrange(n):
+            vector = FeatureVector(raw_slices[i], slices[i], zero_crossing_rates[i], rolloff_freqs[i], slices_bins[i],
+                                   third_octave[i]).get()
+            self.feature_vectors.push(vector)
+
+    def _raw_data_in_slices(self, data):
+        num = int((len(data)-self.fft_sample_length) / self._step_length()) + 1
+        prev_index = 0
+        for i in xrange(num):
+            section = data[prev_index:prev_index + self.fft_sample_length]
+            prev_index += self._step_length()
+            yield section
 
     def push(self, samples):
-        self.audio_buffer.push(samples)
+        self.audio_buffer.push_samples(samples)
         data = self.audio_buffer.pop_working_set()
         if data:
             return self.update(data)
@@ -306,5 +316,19 @@ class Analyzer:
             i += 1
         plt.show()
 
-    def get_feature_vector(self):
-        pass
+
+class FeatureVector:
+    def __init__(self, raw_slice, slice, zero_crossing_rate, rolloff_freq, slice_bin, third_octave):
+        self.raw_slice = raw_slice
+        self.slice = slice
+        self.zero_crossing_rate = zero_crossing_rate
+        self.rolloff_freq = rolloff_freq
+        self.slice_bin = slice_bin
+        self.third_octave = third_octave
+
+    def get(self):
+        vector = []
+
+        # TODO: calculate vector
+
+        return vector
