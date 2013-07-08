@@ -56,7 +56,6 @@ class DataBuffer:
 
     def push(self, item):
         self.data.append(item)
-        print item
         self._trim()
 
     def push_multiple(self, items):
@@ -67,6 +66,20 @@ class DataBuffer:
         length = len(self.data)
         if length > self.length:
             self.data = self.data[length - self.length:]
+
+
+class FeatureVectorBuffer(DataBuffer):
+    def __init__(self, length=1000):
+        DataBuffer.__init__(self, length)
+        self.ResultBuffer = DataBuffer(length)
+
+    def push(self, feature_vector):
+        DataBuffer.push(self, feature_vector)
+        result = self.classify(feature_vector)
+        self.ResultBuffer.push(result)
+
+    def classify(self, feature_vector):
+        pass
 
 
 class Analyzer:
@@ -84,10 +97,10 @@ class Analyzer:
         #     "rolloff_freqs": DataBuffer(),
         #     "slices_bins": DataBuffer()
         # }
-        self.buffers = {name: DataBuffer() for name in
-                        ["raw_slices", "slices", "zero_crossing_rates", "rolloff_freqs", "slices_bins", "third_octave"]}
+        self.buffers = {name: DataBuffer(0) for name in
+                        ["raw_slices", "slices", "zero_crossing_rates", "rolloff_freqs", "slices_bins", "third_octave", "third_octave_autocorrelation"]}
 
-        self.feature_vectors = DataBuffer()
+        self.feature_vectors = FeatureVectorBuffer()
 
     def nextpow2(self, num):
         return int(np.ceil(np.log2(num)))
@@ -240,6 +253,12 @@ class Analyzer:
         output = np.array(output)
         return output
 
+    def autocorrelation_coefficient(self, series):
+        series1 = series - np.average(series)
+        series2 = series1[::-1]
+        corr = np.correlate(series, series2)
+        return float(corr) / np.var(series)
+
     def update(self, data):
         """
 
@@ -276,19 +295,28 @@ class Analyzer:
         slices_bins = self.freq_bins(freqs, slices, DIVISIONS)
         self.buffers["slices_bins"].push_multiple(slices_bins)
 
-        # Analyze the third octave
+        # Extract the third octave
         third_octave_indexes = self.find_indexes(freqs, [700, 1300])
         third_octave = [slice[third_octave_indexes[0]:third_octave_indexes[1]] for slice in slices]
         self.buffers["third_octave"].push_multiple(third_octave)
 
+        # Third octave autocorrelation
+        third_octave_autocorrelation = []
+        for slice in third_octave:
+            third_octave_autocorrelation.append(self.autocorrelation_coefficient(slice))
+        self.buffers["third_octave_autocorrelation"].push_multiple(third_octave_autocorrelation)
+
         # Create feature vectors
         for i in xrange(n):
-            vector = FeatureVector(raw_slices[i], slices[i], zero_crossing_rates[i], rolloff_freqs[i], slices_bins[i],
-                                   third_octave[i]).get()
+            vector = []
+            vector.extend(slices_bins[i])
+            vector.append(zero_crossing_rates[i])
+            vector.append(third_octave_autocorrelation[i])
+            vector = np.array(vector)
             self.feature_vectors.push(vector)
 
     def _raw_data_in_slices(self, data):
-        num = int((len(data)-self.fft_sample_length) / self._step_length()) + 1
+        num = int((len(data) - self.fft_sample_length) / self._step_length()) + 1
         prev_index = 0
         for i in xrange(num):
             section = data[prev_index:prev_index + self.fft_sample_length]
@@ -302,33 +330,22 @@ class Analyzer:
             return self.update(data)
 
     def display(self):
-        fig, axes = plt.subplots(len(self.buffers))
+        fig, axes = plt.subplots(len(self.buffers) + 1)
         i = 0
         for name in self.buffers.keys():
             print name
-            buffer_data = self.buffers[name].data
-            if type(buffer_data[0]) is np.ndarray:
-                # print as spectrogram
-                self.plot_spectrogram(np.array(range(len(buffer_data))), np.array(range(len(buffer_data[0]))), np.array(buffer_data), axes=axes[i])
-            else:
-                # plot as standard (x,y)
-                axes[i].plot(range(len(buffer_data)), buffer_data)
+            axis = axes[i]
+            self._display_buffer(self.buffers[name], axis)
             i += 1
+        self._display_buffer(self.feature_vectors, axes[-1])
         plt.show()
 
-
-class FeatureVector:
-    def __init__(self, raw_slice, slice, zero_crossing_rate, rolloff_freq, slice_bin, third_octave):
-        self.raw_slice = raw_slice
-        self.slice = slice
-        self.zero_crossing_rate = zero_crossing_rate
-        self.rolloff_freq = rolloff_freq
-        self.slice_bin = slice_bin
-        self.third_octave = third_octave
-
-    def get(self):
-        vector = []
-
-        # TODO: calculate vector
-
-        return vector
+    def _display_buffer(self, buffer, axis):
+        buffer_data = buffer.data
+        if type(buffer_data[0]) is np.ndarray:
+            # print as spectrogram
+            self.plot_spectrogram(np.array(range(len(buffer_data))), np.array(range(len(buffer_data[0]))),
+                                  np.array(buffer_data), axes=axis)
+        else:
+            # plot as standard (x,y)
+            axis.plot(range(len(buffer_data)), buffer_data)
