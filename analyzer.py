@@ -177,15 +177,20 @@ class FeatureVectorExtractor:
 
         indexes = self.find_indexes(freqs, divisions)
 
-        power = slices.T
         output = []
 
-        prev_index = 0
-        for index in indexes:
-            output.append(sum(power[prev_index:index + 1]))
-            prev_index = index
+        for slice in slices:
+            output_slice = []
+            prev_index = 0
+            for index in indexes:
+                part = slice[prev_index:index + 1]
+                average = sum(part) / len(part)
+                average = max(average, EPSILON)
+                output_slice.append(average)
+                prev_index = index
+            output.append(output_slice)
 
-        output = np.array(output).T
+        output = np.array(output)
 
         return output
 
@@ -298,7 +303,7 @@ class FeatureVectorExtractor:
         series1 = series - np.average(series)
         series2 = series1[::-1]
         corr = np.correlate(series, series2)
-        return float(corr) / np.var(series)
+        return float(corr) / max(np.var(series), EPSILON)
 
     def analyze(self, data):
         """
@@ -316,8 +321,8 @@ class FeatureVectorExtractor:
         self.buffers["raw_slices"].push_multiple(raw_slices)
 
         # Normalize the slices for analysis purposes
-        slices = abs(raw_slices - self.moving_average(len(raw_slices)))  # subtract baseline long-term moving average
-        slices[slices == 0] = EPSILON  # replace zero values with small number to prevent invalid logarithm
+        slices = raw_slices - self.moving_average(len(raw_slices))  # subtract baseline long-term moving average
+        slices = np.array([[max(elem, EPSILON) for elem in slice] for slice in slices])  # ensure it is positive and nonzero
         slices = self.trim_outliers(slices)  # trim outliers from data
         self.buffers["slices"].push_multiple(slices)
 
@@ -351,7 +356,7 @@ class FeatureVectorExtractor:
         vectors = []
         for i in xrange(n):
             vector = []
-            vector.extend(np.log10(slices_bins[i]))
+            vector.extend(np.log10(slices_bins[i] + EPSILON))
             vector.append(zero_crossing_rates[i])
             vector.append(third_octave_autocorrelation[i])
             vector.append(np.log10(rolloff_freqs[i]))
