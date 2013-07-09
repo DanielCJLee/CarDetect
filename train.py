@@ -3,7 +3,7 @@ import analyzer
 import os
 
 if __name__ == '__main__':
-    classifier = analyzer.NeuralNetworkClassifier(analyzer.feature_vector_length(), 1)
+    classifier = analyzer.NeuralNetworkClassifier(analyzer.feature_vector_length(), 1, n_hidden=2*analyzer.feature_vector_length())
     trainer = analyzer.BatchFileTrainer(classifier)
     start_time = datetime.now()
 
@@ -15,8 +15,9 @@ if __name__ == '__main__':
                 print "Processing recording:", f[0:-4]
                 base = os.path.join(root, f[0:-4])
                 with open(base + ".txt", "r") as x:
-                    data = x.readall()
-                    results = data.split(" ")
+                    data = x.readline()
+                    print data
+                    results = list(data)
                 trainer.add(base + ".wav", results)
                 count += 1
 

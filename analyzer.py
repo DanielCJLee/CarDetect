@@ -23,7 +23,7 @@ SHORT_TERM_MOVING_AVERAGE_LENGTH = 500 / FRAME_TIME_LENGTH
 
 
 def feature_vector_length():
-    return len(DIVISIONS) + 2
+    return 2
 
 
 class AudioBuffer:
@@ -96,7 +96,7 @@ class NeuralNetworkClassifier(Classifier):
     def train(self, data, iterations=1000):
         for item in data:
             self.dataset.addSample(item[0], item[1])
-        trainer = BackpropTrainer(self.network, self.dataset, learningrate=0.01, momentum=0.99)
+        trainer = BackpropTrainer(self.network, self.dataset, learningrate=0.5, momentum=0.1)
         for i in xrange(iterations):
             error = trainer.train()
             print error
@@ -348,7 +348,7 @@ class FeatureVectorExtractor:
         vectors = []
         for i in xrange(n):
             vector = []
-            vector.extend(slices_bins[i])
+            #vector.extend(np.log10(slices_bins[i]))
             vector.append(zero_crossing_rates[i])
             vector.append(third_octave_autocorrelation[i])
             vector = np.array(vector)
