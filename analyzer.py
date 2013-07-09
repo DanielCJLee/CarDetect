@@ -443,10 +443,10 @@ class BatchFileTrainer(FileProcessor):
         target_length = len(feature_vectors)
         source_length = len(results)
         results_stretched = []
-        for i in target_length:
+        for i in xrange(target_length):
             results_stretched.append(results[int(float(i) / target_length * source_length)])
 
-        data = [[feature_vectors[i], results_stretched[i]] for i in target_length]
+        data = [[feature_vectors[i], results_stretched[i]] for i in xrange(target_length)]
 
         self.data.extend(data)
 

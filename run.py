@@ -14,4 +14,4 @@ if __name__ == '__main__':
 
     trainer.add(filename, [])
 
-    print "Finished in", datetime.now() - start_time, "seconds"
+    print "Finished in", datetime.now() - start_time
