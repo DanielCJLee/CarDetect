@@ -13,9 +13,12 @@ from pybrain.tools.shortcuts import buildNetwork
 from pybrain.datasets import SupervisedDataSet
 from scipy.io import wavfile
 import inspect
+from datetime import datetime
+import time
+import sys
 
 EPSILON = np.finfo(np.double).eps
-FRAME_TIME_LENGTH = 200  # length of frame in milliseconds
+FRAME_TIME_LENGTH = 50  # length of frame in milliseconds
 #DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
 DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
 LONG_TERM_MOVING_AVERAGE_LENGTH = 2000 / FRAME_TIME_LENGTH  # length in number of FFTs
@@ -420,7 +423,8 @@ class RealtimeAnalyzer:
         if not math.isnan(result):
             scale = 20
             value = min(max(int(result * scale), 0), scale)
-            print '\r[{0}{1}] {2}'.format('#'*value, ' '*(scale-value), result)
+            # sys.stdout.flush()
+            print "[{0}{1}] {2}".format('#'*value, ' '*(scale-value), result)
 
 
 VIRTUAL_BUFFER_SIZE = 1000

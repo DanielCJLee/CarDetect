@@ -27,6 +27,5 @@ realtime_analyzer = analyzer.RealtimeAnalyzer(RATE, classifier)
 print "Now recording"
 while True:
     data = stream.read(CHUNK)
-    format = "%dh" % CHUNK
-    data = struct.unpack(format, data)
+    data = struct.unpack("%dh" % CHUNK, data)
     realtime_analyzer.push(data)
