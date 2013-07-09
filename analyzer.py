@@ -18,7 +18,7 @@ import time
 import sys
 
 EPSILON = np.finfo(np.double).eps
-FRAME_TIME_LENGTH = 50  # length of frame in milliseconds
+FRAME_TIME_LENGTH = 180  # length of frame in milliseconds
 #DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
 DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
 LONG_TERM_MOVING_AVERAGE_LENGTH = 2000 / FRAME_TIME_LENGTH  # length in number of FFTs
@@ -61,7 +61,7 @@ class AudioBuffer:
 
 
 class DataBuffer:
-    def __init__(self, length=1000):
+    def __init__(self, length=float("inf")):
         self.length = length
         self.data = []
 
@@ -210,38 +210,25 @@ class FeatureVectorExtractor:
 
     def trim_outliers(self, data, num_std_devs=3):
         data10 = np.log10(data)
-
         sd10 = np.std(data10)
         mean10 = np.average(data10)
 
-        #output = min(data, mean10+num_std_devs*sd10)
-        #output = max(output, mean10-num_std_devs*sd10)
-
-        output = np.copy(data)
-
         lower_bound10 = mean10 - num_std_devs * sd10
         upper_bound10 = mean10 + num_std_devs * sd10
-
         lower_bound = 10 ** lower_bound10
         upper_bound = 10 ** upper_bound10
 
-        # print upper_bound10, lower_bound10
+        output = []
+        for elem in data:
+            if elem > upper_bound:
+                new_elem = upper_bound
+            elif elem < lower_bound:
+                new_elem = lower_bound
+            else:
+                new_elem = elem
+            output.append(elem)
+        output = np.array(output)
 
-        num_high = 0
-        num_low = 0
-        count = 0
-
-        for elem in np.nditer(output, op_flags=['readwrite']):
-            elem10 = np.log10(elem)
-            if elem10 > upper_bound10:
-                elem[...] = upper_bound
-                num_high += 1
-            elif elem10 < lower_bound10:
-                elem[...] = lower_bound
-                num_low += 1
-            count += 1
-
-        # print "Trimmed", num_high, "high,",  num_low, "low samples out of", count
         return output
 
     def slice_rolloff_freq(self, slice, threshold=0.90):
@@ -323,7 +310,7 @@ class FeatureVectorExtractor:
         # Normalize the slices for analysis purposes
         slices = raw_slices - self.moving_average(len(raw_slices))  # subtract baseline long-term moving average
         slices = np.array([[max(elem, EPSILON) for elem in slice] for slice in slices])  # ensure it is positive and nonzero
-        slices = self.trim_outliers(slices)  # trim outliers from data
+        # slices = [self.trim_outliers(slice) for slice in slices]  # trim outliers from data
         self.buffers["slices"].push_multiple(slices)
 
         # Calculate zero-crossing rates (in intervals of the FFT block size, w/ overlap)
@@ -465,8 +452,10 @@ class BatchFileTrainer(FileProcessor):
         data = []
         for i in xrange(target_length):
             item = [feature_vectors[i], results_stretched[i]]
-            print item
+            # print item
             data.append(item)
+
+        print "# of feature vectors:", target_length
 
         self.data.extend(data)
 

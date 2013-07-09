@@ -18,10 +18,11 @@ if __name__ == '__main__':
                 base = os.path.join(root, f[0:-4])
                 with open(base + ".txt", "r") as x:
                     data = x.readline()
-                    print data
+                    print "Result mask:", data
                     results = list(data)
                     results = [[item] for item in results]
                 trainer.add(base + ".wav", results)
+                print
                 count += 1
 
     # Train on the loaded dataset
