@@ -1,9 +1,11 @@
 from datetime import datetime
+import time
+import pickle
 import analyzer
 import os
 
 if __name__ == '__main__':
-    classifier = analyzer.NeuralNetworkClassifier(analyzer.feature_vector_length(), 1, n_hidden=2*analyzer.feature_vector_length())
+    classifier = analyzer.NeuralNetworkClassifier
     trainer = analyzer.BatchFileTrainer(classifier)
     start_time = datetime.now()
 
@@ -18,6 +20,7 @@ if __name__ == '__main__':
                     data = x.readline()
                     print data
                     results = list(data)
+                    results = [[item] for item in results]
                 trainer.add(base + ".wav", results)
                 count += 1
 
@@ -27,5 +30,9 @@ if __name__ == '__main__':
         trainer.train()
     else:
         print "No recordings found"
+
+    # Save classifier
+    classifier = trainer.classifier
+    pickle.dump(classifier, open('classifier' + str(int(time.time())) + ".pickle", "wb"))
 
     print "Finished in", datetime.now() - start_time

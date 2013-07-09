@@ -11,19 +11,18 @@ from pybrain.supervised import BackpropTrainer
 from pybrain.tools.shortcuts import buildNetwork
 from pybrain.datasets import SupervisedDataSet
 from scipy.io import wavfile
-
+import inspect
 
 EPSILON = np.finfo(np.double).eps
-
 FRAME_TIME_LENGTH = 50  # length of frame in milliseconds
 #DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
 DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
 LONG_TERM_MOVING_AVERAGE_LENGTH = 2000 / FRAME_TIME_LENGTH  # length in number of FFTs
 SHORT_TERM_MOVING_AVERAGE_LENGTH = 500 / FRAME_TIME_LENGTH
-
-
-def feature_vector_length():
-    return 2
+NETWORK_LEARNING_RATE = 0.3
+NETWORK_MOMENTUM = 0.2
+NETWORK_HIDDEN_NEURONS = 20
+NETWORK_ITERATIONS = 100
 
 
 class AudioBuffer:
@@ -88,18 +87,18 @@ class Classifier(object):  # interface for a generic classifier
 
 
 class NeuralNetworkClassifier(Classifier):
-    def __init__(self, n_inputs, n_outputs, n_hidden=100):
+    def __init__(self, n_inputs, n_outputs, n_hidden=NETWORK_HIDDEN_NEURONS):
         super(NeuralNetworkClassifier, self).__init__(n_inputs, n_outputs)
         self.network = buildNetwork(n_inputs, n_hidden, n_outputs)
         self.dataset = SupervisedDataSet(n_inputs, n_outputs)
 
-    def train(self, data, iterations=1000):
+    def train(self, data, iterations=NETWORK_ITERATIONS):
         for item in data:
             self.dataset.addSample(item[0], item[1])
-        trainer = BackpropTrainer(self.network, self.dataset, learningrate=0.5, momentum=0.1)
+        trainer = BackpropTrainer(self.network, self.dataset, learningrate=NETWORK_LEARNING_RATE, momentum=NETWORK_MOMENTUM)
         for i in xrange(iterations):
             error = trainer.train()
-            print error
+            print (i+1), error
         return error
 
     def run(self, feature_vector):
@@ -348,10 +347,13 @@ class FeatureVectorExtractor:
         vectors = []
         for i in xrange(n):
             vector = []
-            #vector.extend(np.log10(slices_bins[i]))
+            vector.extend(np.log10(slices_bins[i]))
             vector.append(zero_crossing_rates[i])
             vector.append(third_octave_autocorrelation[i])
+            vector.append(np.log10(rolloff_freqs[i]))
             vector = np.array(vector)
+            vector = vector / 10
+            #vector = np.log10(vector)
             vectors.append(vector)
 
         # Return vectors
@@ -379,7 +381,7 @@ class FeatureVectorExtractor:
             axis = axes[i]
             self._display_buffer(self.buffers[name], axis)
             i += 1
-        self._display_buffer(self.classifier, axes[-1])
+        # self._display_buffer(self.classifier, axes[-1])  # Display feature vector
         plt.show()
 
     def _display_buffer(self, buffer, axis):
@@ -424,20 +426,20 @@ class FileProcessor(object):
         rate, data = wavfile.read(filename)
         extractor = FeatureVectorExtractor(rate)
         feature_vectors = extractor.push(data)
+        #extractor.display()
         return feature_vectors
 
 
 class BatchFileTrainer(FileProcessor):
     def __init__(self, classifier):
-        """
-
-        :param classifier: Classifier
-        """
         self.classifier = classifier
         self.data = []
 
     def add(self, filename, results):
         feature_vectors = self._process_file(filename)
+
+        # Remove the first vector, which usually has problems
+        feature_vectors = feature_vectors[1:]
 
         # Create a stretched results list the same length as feature_vectors
         target_length = len(feature_vectors)
@@ -446,11 +448,18 @@ class BatchFileTrainer(FileProcessor):
         for i in xrange(target_length):
             results_stretched.append(results[int(float(i) / target_length * source_length)])
 
-        data = [[feature_vectors[i], results_stretched[i]] for i in xrange(target_length)]
+        data = []
+        for i in xrange(target_length):
+            item = [feature_vectors[i], results_stretched[i]]
+            print item
+            data.append(item)
 
         self.data.extend(data)
 
     def train(self):
+        # Create a new classifier if necessary
+        if inspect.isclass(self.classifier):
+            self.classifier = self.classifier(len(self.data[0][0]), len(self.data[0][1]))
         return self.classifier.train(self.data)
 
 
@@ -460,5 +469,10 @@ class FileAnalyzer(FileProcessor):
 
     def analyze(self, filename):
         vectors = self._process_file(filename)
+        results = []
         for vector in vectors:
-            self.classifier.run(vector)
+            result = self.classifier.run(vector)
+            print vector
+            print result
+            results.append(result)
+        return results
