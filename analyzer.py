@@ -3,6 +3,7 @@ Created on Jul 3, 2013
 
 @author: Zachary
 """
+import math
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,13 +15,13 @@ from scipy.io import wavfile
 import inspect
 
 EPSILON = np.finfo(np.double).eps
-FRAME_TIME_LENGTH = 50  # length of frame in milliseconds
+FRAME_TIME_LENGTH = 200  # length of frame in milliseconds
 #DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
 DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
 LONG_TERM_MOVING_AVERAGE_LENGTH = 2000 / FRAME_TIME_LENGTH  # length in number of FFTs
 SHORT_TERM_MOVING_AVERAGE_LENGTH = 500 / FRAME_TIME_LENGTH
-NETWORK_LEARNING_RATE = 0.3
-NETWORK_MOMENTUM = 0.2
+NETWORK_LEARNING_RATE = 0.2
+NETWORK_MOMENTUM = 0.5
 NETWORK_HIDDEN_NEURONS = 20
 NETWORK_ITERATIONS = 100
 
@@ -106,7 +107,7 @@ class NeuralNetworkClassifier(Classifier):
 
 
 class FeatureVectorBuffer(DataBuffer):
-    def __init__(self, length=1000):
+    def __init__(self, length=float("inf")):
         DataBuffer.__init__(self, length)
         self.results = DataBuffer(length)
 
@@ -410,12 +411,16 @@ class RealtimeAnalyzer:
 
     def push(self, samples):
         feature_vectors = self.extractor.push(samples)
-        for vector in feature_vectors:
-            result = self.classifier.run(vector)
-            self._output(result)
+        if feature_vectors is not None:
+            for vector in feature_vectors:
+                result = self.classifier.run(vector)
+                self._output(result)
 
     def _output(self, result):
-        print result
+        if not math.isnan(result):
+            scale = 20
+            value = min(max(int(result * scale), 0), scale)
+            print '\r[{0}{1}] {2}'.format('#'*value, ' '*(scale-value), result)
 
 
 VIRTUAL_BUFFER_SIZE = 1000
