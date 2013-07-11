@@ -19,10 +19,11 @@ from pybrain.tools.customxml.networkreader import NetworkReader
 EPSILON = np.finfo(np.float).eps
 FRAME_TIME_LENGTH = 180  # length of frame in milliseconds
 # DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
-DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
-LONG_TERM_MOVING_AVERAGE_LENGTH = 2000 / FRAME_TIME_LENGTH  # length in number of FFTs
+# DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
+DIVISIONS = np.array([500, 2500, 7000, 8000])
+LONG_TERM_MOVING_AVERAGE_LENGTH = 3000 / FRAME_TIME_LENGTH  # length in number of FFTs
 SHORT_TERM_MOVING_AVERAGE_LENGTH = 500 / FRAME_TIME_LENGTH
-NETWORK_LEARNING_RATE = 0.3
+NETWORK_LEARNING_RATE = 0.2
 NETWORK_MOMENTUM = 0.1
 NETWORK_HIDDEN_NEURONS = 20
 NETWORK_ITERATIONS = 100
@@ -210,6 +211,7 @@ class FeatureVectorExtractor:
     def moving_average(self, number):
         slices = self.buffers["raw_slices"].data
         averages = []
+        # std_devs = []
         length = len(slices)
         for end in xrange(length - number + 1, length+1):
             start = max(0, end - LONG_TERM_MOVING_AVERAGE_LENGTH)
@@ -218,10 +220,14 @@ class FeatureVectorExtractor:
                 average = sum(slices[start:end]) / actual_length
             else:
                 average = np.array([0]*len(slices[0]))
+            # std_dev = [np.std(line) for line in np.array(slices[start:end]).T]
+            # print std_dev
             # note there is some imprecision in using integer instead of float math
             # but this is faster, and easier to implement
             averages.append(average)
+            # std_devs.append(std_dev)
         averages = np.array(averages)
+        # std_devs = np.array(std_devs)
         return averages
 
     def trim_outliers(self, data, num_std_devs=3):
@@ -247,7 +253,7 @@ class FeatureVectorExtractor:
 
         return output
 
-    def slice_rolloff_freq(self, slice, threshold=0.80):
+    def slice_rolloff_freq(self, slice, threshold=0.70):
         target = threshold * sum(slice)
         partial = 0.0
         i = 0
@@ -258,7 +264,7 @@ class FeatureVectorExtractor:
         return i
 
     def all_rolloff_freq(self, freqs, slices):
-        return [freqs[self.slice_rolloff_freq(x)] for x in slices]
+        return np.array([freqs[self.slice_rolloff_freq(x)] for x in slices])
 
     def avg_zero_crossing_rate(self, sound_data):
         signs = np.sign(np.array(sound_data))
@@ -270,7 +276,8 @@ class FeatureVectorExtractor:
         return rate
 
     def normalize(self, slices):
-        slices = slices - self.moving_average(len(slices))  # normalize with baseline long-term moving average
+        averages = self.moving_average(len(slices))
+        slices = (slices - averages)  # normalize
         slices /= 10
         # slices = np.maximum(np.array(slices), 0)
         output = []
@@ -311,8 +318,8 @@ class FeatureVectorExtractor:
     def autocorrelation_coefficient(self, series):
         series1 = series - np.average(series)
         series2 = series1[::-1]
-        corr = np.correlate(series, series2)
-        return float(corr) / max(np.var(series), EPSILON)
+        corr = np.correlate(np.abs(series), np.abs(series2))
+        return float(corr) / max(np.var(series), EPSILON) / 100
 
     def analyze(self, data):
         """
@@ -344,9 +351,9 @@ class FeatureVectorExtractor:
         self.buffers["zero_crossing_rates"].push_multiple(zero_crossing_rates)
 
         # Calculate rolloff frequencies, with high-pass filter
-        filtered_slices = self.high_pass_filter(raw_slices, freqs, 500)
-        rolloff_freqs = np.array(self.all_rolloff_freq(freqs, filtered_slices))
-        rolloff_freqs /= np.float(np.amax(freqs))
+        filtered_slices = self.high_pass_filter(raw_slices, freqs, 1000)
+        rolloff_freqs = self.all_rolloff_freq(freqs, filtered_slices)
+        rolloff_freqs /= np.amax(freqs)  # make a proportion of the maximum frequency
         self.buffers["rolloff_freqs"].push_multiple(rolloff_freqs)
 
         # Divide each slice into frequency bins
@@ -374,6 +381,7 @@ class FeatureVectorExtractor:
             vector.append(rolloff_freqs[i])
             vector = np.array(vector)
             vectors.append(vector)
+            self.process_vector(vector)
 
         # Return vectors
         return vectors
@@ -416,6 +424,7 @@ class FeatureVectorExtractor:
             axis.plot(range(len(buffer_data)), buffer_data)
 
     def process_vector(self, vector):
+        print vector
         self.classifier.add_vector(vector)
 
 
@@ -448,11 +457,12 @@ VIRTUAL_BUFFER_SIZE = 1000
 
 
 class FileProcessor(object):
-    def _process_file(self, filename):
+    def _process_file(self, filename, display=True):
         rate, data = wavfile.read(filename)
         extractor = FeatureVectorExtractor(rate)
         feature_vectors = extractor.push(data)
-        # extractor.display()
+        if display:
+            extractor.display()
         return feature_vectors
 
 
@@ -477,7 +487,7 @@ class BatchFileTrainer(FileProcessor):
         data = []
         for i in xrange(1, target_length):
             item = [feature_vectors[i], results_stretched[i]]
-            print item
+            # print item
             data.append(item)
 
         print "# of feature vectors:", target_length
@@ -496,12 +506,13 @@ class FileAnalyzer(FileProcessor):
         self.classifier = classifier
 
     def analyze(self, filename):
-        vectors = self._process_file(filename)
+        vectors = self._process_file(filename, display=True)
         results = []
+        text = ""
         for vector in vectors:
             result = self.classifier.run(vector)
-            print ", ".join([str(item) for item in vector])
-            print result
-            print
+            text += ", ".join([str(item) for item in vector]) + ", " + str(result) + "\n"
             results.append(result)
+        with open("analysis.csv", "w") as f:
+            f.write(text)
         return results
