@@ -4,6 +4,7 @@ Created on Jul 3, 2013
 @author: Zachary
 """
 import math
+import inspect
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,19 +13,17 @@ from pybrain.supervised import BackpropTrainer
 from pybrain.tools.shortcuts import buildNetwork
 from pybrain.datasets import SupervisedDataSet
 from scipy.io import wavfile
-import inspect
-from datetime import datetime
-import time
-import sys
+from pybrain.tools.customxml.networkwriter import NetworkWriter
+from pybrain.tools.customxml.networkreader import NetworkReader
 
-EPSILON = np.finfo(np.double).eps
+EPSILON = np.finfo(np.float).eps
 FRAME_TIME_LENGTH = 180  # length of frame in milliseconds
-#DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
+# DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
 DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
 LONG_TERM_MOVING_AVERAGE_LENGTH = 2000 / FRAME_TIME_LENGTH  # length in number of FFTs
 SHORT_TERM_MOVING_AVERAGE_LENGTH = 500 / FRAME_TIME_LENGTH
-NETWORK_LEARNING_RATE = 0.2
-NETWORK_MOMENTUM = 0.5
+NETWORK_LEARNING_RATE = 0.3
+NETWORK_MOMENTUM = 0.1
 NETWORK_HIDDEN_NEURONS = 20
 NETWORK_ITERATIONS = 100
 
@@ -80,7 +79,7 @@ class DataBuffer:
 
 
 class Classifier(object):  # interface for a generic classifier
-    def __init__(self, n_inputs, n_outputs):
+    def __init__(self):
         pass
 
     def train(self, data):
@@ -92,18 +91,32 @@ class Classifier(object):  # interface for a generic classifier
 
 class NeuralNetworkClassifier(Classifier):
     def __init__(self, n_inputs, n_outputs, n_hidden=NETWORK_HIDDEN_NEURONS):
-        super(NeuralNetworkClassifier, self).__init__(n_inputs, n_outputs)
+        super(NeuralNetworkClassifier, self).__init__()
         self.network = buildNetwork(n_inputs, n_hidden, n_outputs)
         self.dataset = SupervisedDataSet(n_inputs, n_outputs)
 
     def train(self, data, iterations=NETWORK_ITERATIONS):
         for item in data:
             self.dataset.addSample(item[0], item[1])
-        trainer = BackpropTrainer(self.network, self.dataset, learningrate=NETWORK_LEARNING_RATE, momentum=NETWORK_MOMENTUM)
+        trainer = BackpropTrainer(self.network, self.dataset, learningrate=NETWORK_LEARNING_RATE,
+                                  momentum=NETWORK_MOMENTUM)
+        error = 0
         for i in xrange(iterations):
             error = trainer.train()
-            print (i+1), error
+            print (i + 1), error
         return error
+
+    def run(self, feature_vector):
+        return self.network.activate(feature_vector)[0]
+
+    def export(self, filename):
+        NetworkWriter.writeToFile(self.network, filename)
+
+
+class SavedNeuralNetworkClassifier(Classifier):
+    def __init__(self, filename):
+        super(SavedNeuralNetworkClassifier, self).__init__()
+        self.network = NetworkReader.readFrom(filename)
 
     def run(self, feature_vector):
         return self.network.activate(feature_vector)[0]
@@ -139,7 +152,8 @@ class FeatureVectorExtractor:
         #     "slices_bins": DataBuffer()
         # }
         self.buffers = {name: DataBuffer() for name in
-                        ["raw_slices", "slices", "zero_crossing_rates", "rolloff_freqs", "slices_bins", "third_octave", "third_octave_autocorrelation"]}
+                        ["raw_slices", "slices", "zero_crossing_rates", "rolloff_freqs", "slices_bins", "third_octave",
+                         "third_octave_autocorrelation"]}
 
         self.classifier = FeatureVectorBuffer()
 
@@ -185,7 +199,6 @@ class FeatureVectorExtractor:
             for index in indexes:
                 part = slice[prev_index:index + 1]
                 average = sum(part) / len(part)
-                average = max(average, EPSILON)
                 output_slice.append(average)
                 prev_index = index
             output.append(output_slice)
@@ -198,10 +211,13 @@ class FeatureVectorExtractor:
         slices = self.buffers["raw_slices"].data
         averages = []
         length = len(slices)
-        for end in xrange(length - number, length):
-            start = max(0, end - LONG_TERM_MOVING_AVERAGE_LENGTH - 1)
-            actual_length = end - start + 1
-            average = sum(slices[start:end + 1]) / actual_length
+        for end in xrange(length - number + 1, length+1):
+            start = max(0, end - LONG_TERM_MOVING_AVERAGE_LENGTH)
+            actual_length = end - start
+            if actual_length > 0:
+                average = sum(slices[start:end]) / actual_length
+            else:
+                average = np.array([0]*len(slices[0]))
             # note there is some imprecision in using integer instead of float math
             # but this is faster, and easier to implement
             averages.append(average)
@@ -226,12 +242,12 @@ class FeatureVectorExtractor:
                 new_elem = lower_bound
             else:
                 new_elem = elem
-            output.append(elem)
+            output.append(new_elem)
         output = np.array(output)
 
         return output
 
-    def slice_rolloff_freq(self, slice, threshold=0.90):
+    def slice_rolloff_freq(self, slice, threshold=0.80):
         target = threshold * sum(slice)
         partial = 0.0
         i = 0
@@ -254,9 +270,15 @@ class FeatureVectorExtractor:
         return rate
 
     def normalize(self, slices):
+        slices = slices - self.moving_average(len(slices))  # normalize with baseline long-term moving average
+        slices /= 10
+        # slices = np.maximum(np.array(slices), 0)
         output = []
         for slice in slices:
-            output.append(slice / np.average(slice))
+            # slice = slice / np.average(slice)
+            output.append(slice)
+        # slices = np.array([[max(elem, 0) for elem in slice] for slice in slices])  # ensure it is positive
+        # slices = [self.trim_outliers(slice) for slice in slices]  # trim outliers from data
         return np.array(output)
 
     def _step_length(self):
@@ -304,13 +326,15 @@ class FeatureVectorExtractor:
         raw_slices = Pxx.T  # transpose the power matrix into time slices
         n = len(raw_slices)  # number of slices in each of following sequences
 
+        # Decibel scale
+        raw_slices = 10 * np.log10(raw_slices) + 60
+        raw_slices = raw_slices.clip(EPSILON)
+
         # Add raw slices to buffer for use in calculating moving average
         self.buffers["raw_slices"].push_multiple(raw_slices)
 
         # Normalize the slices for analysis purposes
-        slices = raw_slices - self.moving_average(len(raw_slices))  # subtract baseline long-term moving average
-        slices = np.array([[max(elem, EPSILON) for elem in slice] for slice in slices])  # ensure it is positive and nonzero
-        # slices = [self.trim_outliers(slice) for slice in slices]  # trim outliers from data
+        slices = self.normalize(raw_slices)
         self.buffers["slices"].push_multiple(slices)
 
         # Calculate zero-crossing rates (in intervals of the FFT block size, w/ overlap)
@@ -320,8 +344,9 @@ class FeatureVectorExtractor:
         self.buffers["zero_crossing_rates"].push_multiple(zero_crossing_rates)
 
         # Calculate rolloff frequencies, with high-pass filter
-        filtered_slices = self.high_pass_filter(slices, freqs, 500)
-        rolloff_freqs = self.all_rolloff_freq(freqs, filtered_slices)
+        filtered_slices = self.high_pass_filter(raw_slices, freqs, 500)
+        rolloff_freqs = np.array(self.all_rolloff_freq(freqs, filtered_slices))
+        rolloff_freqs /= np.float(np.amax(freqs))
         self.buffers["rolloff_freqs"].push_multiple(rolloff_freqs)
 
         # Divide each slice into frequency bins
@@ -343,13 +368,11 @@ class FeatureVectorExtractor:
         vectors = []
         for i in xrange(n):
             vector = []
-            vector.extend(np.log10(slices_bins[i] + EPSILON))
+            vector.extend(slices_bins[i])
             vector.append(zero_crossing_rates[i])
             vector.append(third_octave_autocorrelation[i])
-            vector.append(np.log10(rolloff_freqs[i]))
+            vector.append(rolloff_freqs[i])
             vector = np.array(vector)
-            vector = vector / 10
-            #vector = np.log10(vector)
             vectors.append(vector)
 
         # Return vectors
@@ -377,15 +400,17 @@ class FeatureVectorExtractor:
             axis = axes[i]
             self._display_buffer(self.buffers[name], axis)
             i += 1
-        # self._display_buffer(self.classifier, axes[-1])  # Display feature vector
+            # self._display_buffer(self.classifier, axes[-1])  # Display feature vector
         plt.show()
 
     def _display_buffer(self, buffer, axis):
         buffer_data = buffer.data
         if type(buffer_data[0]) is np.ndarray:
             # print as spectrogram
+            shifted_buffer_data = np.array(buffer_data) - np.amin(buffer_data)
+            shifted_buffer_data = shifted_buffer_data.clip(EPSILON)
             self.plot_spectrogram(np.array(range(len(buffer_data))), np.array(range(len(buffer_data[0]))),
-                                  np.array(buffer_data), axes=axis)
+                                  shifted_buffer_data, axes=axis)
         else:
             # plot as standard (x,y)
             axis.plot(range(len(buffer_data)), buffer_data)
@@ -416,7 +441,7 @@ class RealtimeAnalyzer:
             scale = 20
             value = min(max(int(result * scale), 0), scale)
             # sys.stdout.flush()
-            print "[{0}{1}] {2}".format('#'*value, ' '*(scale-value), result)
+            print "[{0}{1}] {2}".format('#' * value, ' ' * (scale - value), result)
 
 
 VIRTUAL_BUFFER_SIZE = 1000
@@ -427,7 +452,7 @@ class FileProcessor(object):
         rate, data = wavfile.read(filename)
         extractor = FeatureVectorExtractor(rate)
         feature_vectors = extractor.push(data)
-        #extractor.display()
+        # extractor.display()
         return feature_vectors
 
 
@@ -450,9 +475,9 @@ class BatchFileTrainer(FileProcessor):
             results_stretched.append(results[int(float(i) / target_length * source_length)])
 
         data = []
-        for i in xrange(target_length):
+        for i in xrange(1, target_length):
             item = [feature_vectors[i], results_stretched[i]]
-            # print item
+            print item
             data.append(item)
 
         print "# of feature vectors:", target_length
@@ -475,7 +500,8 @@ class FileAnalyzer(FileProcessor):
         results = []
         for vector in vectors:
             result = self.classifier.run(vector)
-            print vector
+            print ", ".join([str(item) for item in vector])
             print result
+            print
             results.append(result)
         return results

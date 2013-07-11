@@ -18,9 +18,8 @@ stream = p.open(format=FORMAT,
                 input=True,
                 frames_per_buffer=CHUNK)
 
-classifier_filename = sys.argv[1]
-print "Loading classifier:", classifier_filename
-classifier = pickle.load(open(classifier_filename, 'rb'))
+classifier_filename = "classifier.xml"
+classifier = analyzer.SavedNeuralNetworkClassifier(classifier_filename)
 
 realtime_analyzer = analyzer.RealtimeAnalyzer(RATE, classifier)
 

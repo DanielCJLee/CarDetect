@@ -18,7 +18,7 @@ if __name__ == '__main__':
                 base = os.path.join(root, f[0:-4])
                 with open(base + ".txt", "r") as x:
                     data = x.readline()
-                    print "Result mask:", data
+                    #print "Result mask:", data
                     results = list(data)
                     results = [[item] for item in results]
                 trainer.add(base + ".wav", results)
@@ -33,7 +33,11 @@ if __name__ == '__main__':
         print "No recordings found"
 
     # Save classifier
-    classifier = trainer.classifier
-    pickle.dump(classifier, open('classifier' + str(int(time.time())) + ".pickle", "wb"))
+    # filename = "classifier" + str(int(time.time())) + ".xml"
+    filename = "classifier.xml"
+    trainer.classifier.export(filename)
 
+    print
+    print "Saved trained network to:", filename
+    print
     print "Finished in", datetime.now() - start_time
