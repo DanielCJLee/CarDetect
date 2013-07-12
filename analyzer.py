@@ -307,6 +307,14 @@ class FeatureVectorExtractor:
         output = np.array(output)
         return output
 
+    def pairwise_ratios(self, items):
+        length = len(items)
+        ratios = []
+        for i in xrange(length):
+            for j in xrange(i+1, length):
+                ratios.append(float(i) / j)
+        return ratios
+
     def autocorrelation_coefficient(self, series):
         series1 = series - np.average(series)
         series2 = series1[::-1]
@@ -363,11 +371,15 @@ class FeatureVectorExtractor:
             third_octave_autocorrelation.append(self.autocorrelation_coefficient(slice))
         self.buffers["third_octave_autocorrelation"].push_multiple(third_octave_autocorrelation)
 
+        # Pairwise ratios between frequency bins
+        ratios = [self.pairwise_ratios(slice_bins) for slice_bins in slices_bins]
+
         # Create feature vectors
         vectors = []
         for i in xrange(n):
             vector = []
-            vector.extend(slices_bins[i])
+            # vector.extend(slices_bins[i])
+            vector.extend(ratios[i])
             vector.append(zero_crossing_rates[i])
             vector.append(third_octave_autocorrelation[i])
             vector.append(rolloff_freqs[i])
