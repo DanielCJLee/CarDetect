@@ -4,6 +4,16 @@ import pickle
 import analyzer
 import os
 
+
+def result_mask(item):
+    if item == 1:
+        return [0, 1]
+    elif item == 2:
+        return [1, 1]
+    else:
+        return [0, 0]
+
+
 if __name__ == '__main__':
     classifier = analyzer.NeuralNetworkClassifier
     trainer = analyzer.BatchFileTrainer(classifier)
@@ -20,7 +30,7 @@ if __name__ == '__main__':
                     data = x.readline()
                     #print "Result mask:", data
                     results = list(data)
-                    results = [[item] for item in results]
+                    results = [result_mask(int(item)) for item in results]
                 trainer.add(base + ".wav", results)
                 print
                 count += 1

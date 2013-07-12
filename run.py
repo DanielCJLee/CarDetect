@@ -3,6 +3,7 @@ import sys
 import analyzer
 import matplotlib.pyplot as plt
 import os
+import numpy as np
 
 if __name__ == '__main__':
     filename = sys.argv[1]
@@ -18,9 +19,12 @@ if __name__ == '__main__':
 
     print "Processing file:", filename
     results = file_analyzer.analyze(filename, save_filename=save_filename, display=True)
-    print "\t".join([str(item) for item in results])
+    print "Finished in", datetime.now() - start_time
 
-    plt.plot(results)
+    output = np.array(results).T
+    for row in output:
+        print "\t".join([str(item) for item in row])
+        plt.plot(row)
+
     plt.show()
 
-    print "Finished in", datetime.now() - start_time

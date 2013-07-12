@@ -21,8 +21,8 @@ FRAME_TIME_LENGTH = 180  # length of frame in milliseconds
 # DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
 # DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
 DIVISIONS = np.array([500, 2500, 7000])
-MOVING_AVERAGE_LENGTH = 2000 / FRAME_TIME_LENGTH  # length in number of FFTs
-NETWORK_LEARNING_RATE = 0.2
+MOVING_AVERAGE_LENGTH = 5000 / FRAME_TIME_LENGTH  # length in number of FFTs
+NETWORK_LEARNING_RATE = 0.3
 NETWORK_MOMENTUM = 0.1
 NETWORK_HIDDEN_NEURONS = 20
 NETWORK_ITERATIONS = 50
@@ -107,7 +107,7 @@ class NeuralNetworkClassifier(Classifier):
         return error
 
     def run(self, feature_vector):
-        return self.network.activate(feature_vector)[0]
+        return self.network.activate(feature_vector)
 
     def export(self, filename):
         NetworkWriter.writeToFile(self.network, filename)
@@ -119,7 +119,7 @@ class SavedNeuralNetworkClassifier(Classifier):
         self.network = NetworkReader.readFrom(filename)
 
     def run(self, feature_vector):
-        return self.network.activate(feature_vector)[0]
+        return self.network.activate(feature_vector)
 
 
 class FeatureVectorBuffer(DataBuffer):
@@ -207,28 +207,22 @@ class FeatureVectorExtractor:
 
         return output
 
-    def moving_average(self, number):
-        slices = self.buffers["raw_slices"].data
-        averages = []
-        # std_devs = []
+    def moving_threshold(self, number):
+        slices = np.array(self.buffers["raw_slices"].data)
+        thresholds = []
         length = len(slices)
         for end in xrange(length - number, length):
             start = max(0, end - MOVING_AVERAGE_LENGTH)
             actual_length = end - start
             if actual_length > 0:
-                average = sum(slices[start:end]) / actual_length
+                two_std_devs = [2 * np.std(band) for band in slices[start:end].T]
+                threshold = sum(slices[start:end])/actual_length - two_std_devs
             else:
-                average = np.array([0]*len(slices[0]))
-            # std_dev = [np.std(line) for line in np.array(slices[start:end]).T]
-            # print std_dev
-            # note there is some imprecision in using integer instead of float math
-            # but this is faster, and easier to implement
-            averages.append(average)
-            # std_devs.append(std_dev)
-        averages = np.array(averages)
-        assert len(averages) == number
-        # std_devs = np.array(std_devs)
-        return averages
+                threshold = np.array([0]*len(slices[0]))
+            thresholds.append(threshold)
+        thresholds = np.array(thresholds)
+        assert len(thresholds) == number
+        return thresholds
 
     def trim_outliers(self, data, num_std_devs=3):
         data10 = np.log10(data)
@@ -276,8 +270,10 @@ class FeatureVectorExtractor:
         return rate
 
     def normalize(self, slices):
-        averages = self.moving_average(len(slices))
-        slices = np.abs(slices - averages) / 10  # normalize and scale
+        thresholds = self.moving_threshold(len(slices))
+        slices = np.abs(slices - thresholds)  # normalize
+        slices = slices.clip(0)  # clip at threshold
+        slices /= 10  # scale downwards
         return slices
 
     def _step_length(self):
@@ -378,10 +374,10 @@ class FeatureVectorExtractor:
         vectors = []
         for i in xrange(n):
             vector = []
-            # vector.extend(slices_bins[i])
+            vector.extend(slices_bins[i])
             vector.extend(ratios[i])
-            vector.append(zero_crossing_rates[i])
-            vector.append(third_octave_autocorrelation[i])
+            # vector.append(zero_crossing_rates[i])
+            # vector.append(third_octave_autocorrelation[i])
             vector.append(rolloff_freqs[i])
             vector = np.array(vector)
             vectors.append(vector)
@@ -419,9 +415,9 @@ class FeatureVectorExtractor:
         buffer_data = buffer.data
         if type(buffer_data[0]) is np.ndarray:
             # print as spectrogram
-            shifted_buffer_data = np.array(buffer_data) - np.amin(buffer_data)
-            shifted_buffer_data = shifted_buffer_data.clip(EPSILON)
-            shifted_buffer_data = shifted_buffer_data[1:]
+            # shifted_buffer_data = np.array(buffer_data) - np.amin(buffer_data)
+            # shifted_buffer_data = shifted_buffer_data.clip(EPSILON)
+            shifted_buffer_data = np.array(buffer_data[1:])
             self.plot_spectrogram(np.array(range(len(buffer_data)-1)), np.array(range(len(buffer_data[0]))),
                                   shifted_buffer_data, axes=axis)
         else:
@@ -451,6 +447,7 @@ class RealtimeAnalyzer:
                 self._output(result)
 
     def _output(self, result):
+        result = sum(result)
         if not math.isnan(result):
             scale = 20
             value = min(max(int(result * scale), 0), scale)
@@ -479,9 +476,6 @@ class BatchFileTrainer(FileProcessor):
     def add(self, filename, results):
         feature_vectors = self._process_file(filename)
 
-        # Remove the first vector, which usually has problems
-        feature_vectors = feature_vectors[1:]
-
         # Create a stretched results list the same length as feature_vectors
         target_length = len(feature_vectors)
         source_length = len(results)
@@ -490,12 +484,12 @@ class BatchFileTrainer(FileProcessor):
             results_stretched.append(results[int(float(i) / target_length * source_length)])
 
         data = []
-        for i in xrange(1, target_length):
+        for i in xrange(1, target_length):  # Remove the first vector, which usually has problems
             item = [feature_vectors[i], results_stretched[i]]
-            # print item
+            print item
             data.append(item)
 
-        print "# of feature vectors:", target_length
+        print "# of feature vectors:", target_length - 1
 
         self.data.extend(data)
 
@@ -516,7 +510,7 @@ class FileAnalyzer(FileProcessor):
         text = ""
         for vector in vectors:
             result = self.classifier.run(vector)
-            text += ", ".join([str(item) for item in vector]) + ", " + str(result) + "\n"
+            text += ",".join([str(item) for item in vector]) + "," + ",".join([str(item) for item in result]) + "\n"
             results.append(result)
         if save_filename is not None:
             with open(save_filename, "w") as f:
