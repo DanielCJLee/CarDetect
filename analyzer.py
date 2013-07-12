@@ -312,7 +312,7 @@ class FeatureVectorExtractor:
         ratios = []
         for i in xrange(length):
             for j in xrange(i+1, length):
-                ratios.append(float(i) / j)
+                ratios.append(float(items[i]) / items[j])
         return ratios
 
     def autocorrelation_coefficient(self, series):
@@ -510,14 +510,15 @@ class FileAnalyzer(FileProcessor):
     def __init__(self, classifier):
         self.classifier = classifier
 
-    def analyze(self, filename):
-        vectors = self._process_file(filename, display=True)
+    def analyze(self, filename, save_filename=None):
+        vectors = self._process_file(filename)
         results = []
         text = ""
         for vector in vectors:
             result = self.classifier.run(vector)
             text += ", ".join([str(item) for item in vector]) + ", " + str(result) + "\n"
             results.append(result)
-        with open("analysis.csv", "w") as f:
-            f.write(text)
+        if save_filename is not None:
+            with open(save_filename, "w") as f:
+                f.write(text)
         return results
