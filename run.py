@@ -17,7 +17,7 @@ if __name__ == '__main__':
     start_time = datetime.now()
 
     print "Processing file:", filename
-    results = file_analyzer.analyze(filename, save_filename=save_filename)
+    results = file_analyzer.analyze(filename, save_filename=save_filename, display=True)
     print "\t".join([str(item) for item in results])
 
     plt.plot(results)

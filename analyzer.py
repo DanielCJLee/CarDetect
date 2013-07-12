@@ -20,12 +20,12 @@ EPSILON = np.finfo(np.float).eps
 FRAME_TIME_LENGTH = 180  # length of frame in milliseconds
 # DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
 # DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
-DIVISIONS = np.array([500, 2500, 7000, 8000])
+DIVISIONS = np.array([500, 2500, 7000])
 MOVING_AVERAGE_LENGTH = 2000 / FRAME_TIME_LENGTH  # length in number of FFTs
 NETWORK_LEARNING_RATE = 0.2
 NETWORK_MOMENTUM = 0.1
-NETWORK_HIDDEN_NEURONS = 10
-NETWORK_ITERATIONS = 100
+NETWORK_HIDDEN_NEURONS = 20
+NETWORK_ITERATIONS = 50
 
 
 class AudioBuffer:
@@ -277,7 +277,7 @@ class FeatureVectorExtractor:
 
     def normalize(self, slices):
         averages = self.moving_average(len(slices))
-        slices = (slices - averages) / 10  # normalize and scale
+        slices = np.abs(slices - averages) / 10  # normalize and scale
         return slices
 
     def _step_length(self):
@@ -307,12 +307,12 @@ class FeatureVectorExtractor:
         output = np.array(output)
         return output
 
-    def pairwise_ratios(self, items):
+    def pairwise_differences(self, items):
         length = len(items)
         ratios = []
         for i in xrange(length):
-            for j in xrange(i+1, length):
-                ratios.append(float(items[i]) / items[j])
+            for j in xrange(i + 1, length):
+                ratios.append(items[i] - items[j])
         return ratios
 
     def autocorrelation_coefficient(self, series):
@@ -371,8 +371,8 @@ class FeatureVectorExtractor:
             third_octave_autocorrelation.append(self.autocorrelation_coefficient(slice))
         self.buffers["third_octave_autocorrelation"].push_multiple(third_octave_autocorrelation)
 
-        # Pairwise ratios between frequency bins
-        ratios = [self.pairwise_ratios(slice_bins) for slice_bins in slices_bins]
+        # Pairwise differences (ratio of magnitude) between frequency bins
+        ratios = [self.pairwise_differences(slice_bins) for slice_bins in slices_bins]
 
         # Create feature vectors
         vectors = []
@@ -510,8 +510,8 @@ class FileAnalyzer(FileProcessor):
     def __init__(self, classifier):
         self.classifier = classifier
 
-    def analyze(self, filename, save_filename=None):
-        vectors = self._process_file(filename)
+    def analyze(self, filename, save_filename=None, **kargs):
+        vectors = self._process_file(filename, **kargs)
         results = []
         text = ""
         for vector in vectors:
