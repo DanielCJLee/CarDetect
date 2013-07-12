@@ -22,12 +22,13 @@ if __name__ == '__main__':
     start_time = datetime.now()
 
     print "Processing file:", filename
-    results = file_analyzer.analyze(filename, save_filename=save_filename)
+    results = file_analyzer.analyze(filename, save_filename=save_filename, display=True)
     print "Finished in", datetime.now() - start_time
 
     output = np.array(results).T
     processed_output = [0] * len(output[0])
     for row in output:
+        print "\t".join([str(item) for item in row])
         for i in xrange(len(row)):
             if row[i] >= THRESHOLD:
                 processed_output[i] += 1
