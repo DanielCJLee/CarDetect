@@ -21,7 +21,8 @@ FRAME_TIME_LENGTH = 180  # length of frame in milliseconds
 # DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
 # DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
 DIVISIONS = np.array([500, 2500, 7000])
-MOVING_AVERAGE_LENGTH = 5000 / FRAME_TIME_LENGTH  # length in number of FFTs
+MOVING_AVERAGE_LENGTH = 500 / FRAME_TIME_LENGTH  # length in number of FFTs
+MOVING_THRESHOLD_LENGTH = 5000 / FRAME_TIME_LENGTH
 NETWORK_LEARNING_RATE = 0.3
 NETWORK_MOMENTUM = 0.1
 NETWORK_HIDDEN_NEURONS = 20
@@ -209,19 +210,27 @@ class FeatureVectorExtractor:
 
     def moving_threshold(self, number):
         slices = np.array(self.buffers["raw_slices"].data)
+        averages = []
         thresholds = []
         length = len(slices)
-        for end in xrange(length - number, length):
+
+        for end in xrange(length - number + 1, length + 1):
+            # Take the moving average to smooth out the data
             start = max(0, end - MOVING_AVERAGE_LENGTH)
             actual_length = end - start
-            if actual_length > 0:
-                two_std_devs = [2 * np.std(band) for band in slices[start:end].T]
-                threshold = sum(slices[start:end])/actual_length - two_std_devs
-            else:
-                threshold = np.array([0]*len(slices[0]))
+            average = sum(slices[start:end]) / actual_length
+            averages.append(average)
+
+            # Find the sliding minimum value in each frequency band as threshold
+            start2 = max(0, end - MOVING_THRESHOLD_LENGTH)
+            possible_thresholds = np.array(averages[start2:end]).T
+            threshold = []
+            for band in possible_thresholds:
+                threshold.append(np.amin(band))
             thresholds.append(threshold)
-        thresholds = np.array(thresholds)
+
         assert len(thresholds) == number
+
         return thresholds
 
     def trim_outliers(self, data, num_std_devs=3):
@@ -447,12 +456,15 @@ class RealtimeAnalyzer:
                 self._output(result)
 
     def _output(self, result):
-        result = sum(result)
-        if not math.isnan(result):
-            scale = 20
-            value = min(max(int(result * scale), 0), scale)
+        output = 0
+        for item in result:
+            if item > 0.5:
+                output += 1
+        if not math.isnan(output):
+            scale = 2
+            value = min(max(int(output), 0), scale)
             # sys.stdout.flush()
-            print "[{0}{1}] {2}".format('#' * value, ' ' * (scale - value), result)
+            print "[{0}{1}] {2}".format('#' * value, ' ' * (scale - value), output)
 
 
 VIRTUAL_BUFFER_SIZE = 1000
