@@ -1,9 +1,8 @@
 import struct
 import analyzer
 from datetime import datetime
-import pickle
-import sys
 import pyaudio
+import time
 
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
@@ -23,8 +22,21 @@ classifier = analyzer.SavedNeuralNetworkClassifier(classifier_filename)
 
 realtime_analyzer = analyzer.RealtimeAnalyzer(RATE, classifier)
 
+
+def timestamp():
+    return float(time.time() + 0.5)
+
+print timestamp()
 print "Now recording"
+i = 0
+start_time = timestamp()
 while True:
+    i += 1
     data = stream.read(CHUNK)
     data = struct.unpack("%dh" % CHUNK, data)
     realtime_analyzer.push(data)
+    if i >= 100:
+        rate = CHUNK * i / (timestamp() - start_time)
+        start_time = timestamp()
+        print rate
+        i = 0
