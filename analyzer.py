@@ -21,11 +21,10 @@ FRAME_TIME_LENGTH = 180  # length of frame in milliseconds
 # DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
 # DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
 DIVISIONS = np.array([500, 2500, 7000, 8000])
-LONG_TERM_MOVING_AVERAGE_LENGTH = 3000 / FRAME_TIME_LENGTH  # length in number of FFTs
-SHORT_TERM_MOVING_AVERAGE_LENGTH = 500 / FRAME_TIME_LENGTH
+MOVING_AVERAGE_LENGTH = 2000 / FRAME_TIME_LENGTH  # length in number of FFTs
 NETWORK_LEARNING_RATE = 0.2
 NETWORK_MOMENTUM = 0.1
-NETWORK_HIDDEN_NEURONS = 20
+NETWORK_HIDDEN_NEURONS = 10
 NETWORK_ITERATIONS = 100
 
 
@@ -213,8 +212,8 @@ class FeatureVectorExtractor:
         averages = []
         # std_devs = []
         length = len(slices)
-        for end in xrange(length - number + 1, length+1):
-            start = max(0, end - LONG_TERM_MOVING_AVERAGE_LENGTH)
+        for end in xrange(length - number, length):
+            start = max(0, end - MOVING_AVERAGE_LENGTH)
             actual_length = end - start
             if actual_length > 0:
                 average = sum(slices[start:end]) / actual_length
@@ -227,6 +226,7 @@ class FeatureVectorExtractor:
             averages.append(average)
             # std_devs.append(std_dev)
         averages = np.array(averages)
+        assert len(averages) == number
         # std_devs = np.array(std_devs)
         return averages
 
@@ -253,7 +253,7 @@ class FeatureVectorExtractor:
 
         return output
 
-    def slice_rolloff_freq(self, slice, threshold=0.70):
+    def slice_rolloff_freq(self, slice, threshold=0.9):
         target = threshold * sum(slice)
         partial = 0.0
         i = 0
@@ -277,16 +277,8 @@ class FeatureVectorExtractor:
 
     def normalize(self, slices):
         averages = self.moving_average(len(slices))
-        slices = (slices - averages)  # normalize
-        slices /= 10
-        # slices = np.maximum(np.array(slices), 0)
-        output = []
-        for slice in slices:
-            # slice = slice / np.average(slice)
-            output.append(slice)
-        # slices = np.array([[max(elem, 0) for elem in slice] for slice in slices])  # ensure it is positive
-        # slices = [self.trim_outliers(slice) for slice in slices]  # trim outliers from data
-        return np.array(output)
+        slices = (slices - averages) / 10  # normalize and scale
+        return slices
 
     def _step_length(self):
         return self.fft_sample_length - self.overlap_sample_length
@@ -351,7 +343,7 @@ class FeatureVectorExtractor:
         self.buffers["zero_crossing_rates"].push_multiple(zero_crossing_rates)
 
         # Calculate rolloff frequencies, with high-pass filter
-        filtered_slices = self.high_pass_filter(raw_slices, freqs, 1000)
+        filtered_slices = self.high_pass_filter(np.abs(slices), freqs, 1000)
         rolloff_freqs = self.all_rolloff_freq(freqs, filtered_slices)
         rolloff_freqs /= np.amax(freqs)  # make a proportion of the maximum frequency
         self.buffers["rolloff_freqs"].push_multiple(rolloff_freqs)
@@ -401,7 +393,7 @@ class FeatureVectorExtractor:
             return self.analyze(data)
 
     def display(self):
-        fig, axes = plt.subplots(len(self.buffers) + 1)
+        fig, axes = plt.subplots(len(self.buffers))
         i = 0
         for name in self.buffers.keys():
             print name
@@ -417,14 +409,15 @@ class FeatureVectorExtractor:
             # print as spectrogram
             shifted_buffer_data = np.array(buffer_data) - np.amin(buffer_data)
             shifted_buffer_data = shifted_buffer_data.clip(EPSILON)
-            self.plot_spectrogram(np.array(range(len(buffer_data))), np.array(range(len(buffer_data[0]))),
+            shifted_buffer_data = shifted_buffer_data[1:]
+            self.plot_spectrogram(np.array(range(len(buffer_data)-1)), np.array(range(len(buffer_data[0]))),
                                   shifted_buffer_data, axes=axis)
         else:
             # plot as standard (x,y)
-            axis.plot(range(len(buffer_data)), buffer_data)
+            axis.plot(range(len(buffer_data)-1), buffer_data[1:])
 
     def process_vector(self, vector):
-        print vector
+        # print vector
         self.classifier.add_vector(vector)
 
 
@@ -457,7 +450,7 @@ VIRTUAL_BUFFER_SIZE = 1000
 
 
 class FileProcessor(object):
-    def _process_file(self, filename, display=True):
+    def _process_file(self, filename, display=False):
         rate, data = wavfile.read(filename)
         extractor = FeatureVectorExtractor(rate)
         feature_vectors = extractor.push(data)
