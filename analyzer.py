@@ -330,6 +330,15 @@ class FeatureVectorExtractor:
         corr = np.correlate(np.abs(series), np.abs(series2))
         return float(corr) / max(np.var(series), EPSILON) / 100
 
+    def fft(self, data):
+        # Apply Hamming window
+        window = np.hamming(len(data))
+        windowed_data = window * data
+
+        # Perform FFT on data
+        P = np.fft.fft(windowed_data)
+        return P.real
+
     def analyze(self, data):
         """
 
