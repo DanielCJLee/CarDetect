@@ -23,7 +23,7 @@ if __name__ == '__main__':
     start_time = datetime.now()
 
     print "Processing file:", filename
-    results = file_analyzer.analyze(filename, save_filename=save_filename)
+    results = file_analyzer.analyze(filename, save_filename=save_filename, display=True, buffer_list={"slices", "stddev"})
     print "Finished in", datetime.now() - start_time
 
     output = np.array(results).T
@@ -39,4 +39,4 @@ if __name__ == '__main__':
     plt.plot(total)
     plt.plot(processed_output)
     plt.savefig(plot_filename)
-    plt.show()
+    #plt.show()

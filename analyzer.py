@@ -20,7 +20,7 @@ EPSILON = np.finfo(np.float).eps
 FRAME_TIME_LENGTH = 180  # length of frame in milliseconds
 # DIVISIONS = np.array([40, 70, 110, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 11025])
 # DIVISIONS = np.array([500, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 7000, 10000])
-DIVISIONS = np.array([500, 2500, 7000])
+DIVISIONS = np.array([500, 1000, 2500, 5000, 7000])
 MOVING_AVERAGE_LENGTH = 3  # length in number of FFT intervals
 MOVING_THRESHOLD_LENGTH = 70
 NETWORK_LEARNING_RATE = 0.3
@@ -93,7 +93,7 @@ class Classifier(object):  # interface for a generic classifier
 class NeuralNetworkClassifier(Classifier):
     def __init__(self, n_inputs, n_outputs, n_hidden=NETWORK_HIDDEN_NEURONS):
         super(NeuralNetworkClassifier, self).__init__()
-        self.network = buildNetwork(n_inputs, n_hidden, n_outputs)
+        self.network = buildNetwork(n_inputs, n_hidden, n_hidden, n_hidden, n_outputs)
         self.dataset = SupervisedDataSet(n_inputs, n_outputs)
 
     def train(self, data, iterations=NETWORK_ITERATIONS):
@@ -341,7 +341,7 @@ class FeatureVectorExtractor:
 
         # Decibel scale
         raw_slices = 10 * np.log10(raw_slices) + 60
-        raw_slices = raw_slices.clip(EPSILON)
+        raw_slices = raw_slices.clip(0)
 
         # Add raw slices to buffer for use in calculating moving average
         self.buffers["raw_slices"].push_multiple(raw_slices)
@@ -391,14 +391,20 @@ class FeatureVectorExtractor:
         self.buffers["magnitude"] = DataBuffer()
         self.buffers["magnitude"].push_multiple(magnitude)
 
+        # Standard deviation of frequency spectrum
+        stddev = [np.std(slice) for slice in slices]
+        self.buffers["stddev"] = DataBuffer()
+        self.buffers["stddev"].push_multiple(stddev)
+
         # Create feature vectors
         vectors = []
         for i in xrange(n):
             vector = []
-            vector.extend(slices_bins[i])
-            # vector.extend(ratios[i])
+            # vector.extend(slices_bins[i])
+            vector.extend(ratios[i])
             vector.append(zero_crossing_rates[i])
             # vector.append(third_octave_autocorrelation[i])
+            vector.append(stddev[i])
             vector.append(rolloff_freqs[i])
             vector.append(magnitude[i])
             vector = np.array(vector)
@@ -422,15 +428,23 @@ class FeatureVectorExtractor:
         if data:
             return self.analyze(data)
 
-    def display(self, plot_filename=None):
-        fig, axes = plt.subplots(len(self.buffers))
+    def display(self, plot_filename=None, buffer_list=None):
+        if buffer_list is None:
+            length = len(self.buffers)
+        else:
+            length = len(buffer_list)
+        fig, axes = plt.subplots(length)
         i = 0
         for name in self.buffers.keys():
-            print name
-            axis = axes[i]
-            self._display_buffer(self.buffers[name], axis)
-            i += 1
-            # self._display_buffer(self.classifier, axes[-1])  # Display feature vector
+            if buffer_list is None or name in buffer_list:
+                print name
+                try:
+                    axis = axes[i]
+                except TypeError:
+                    axis = axes
+                self._display_buffer(self.buffers[name], axis)
+                i += 1
+                # self._display_buffer(self.classifier, axes[-1])  # Display feature vector
         if plot_filename is not None:
             plt.savefig(plot_filename)
         plt.show()
