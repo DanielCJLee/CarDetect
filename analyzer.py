@@ -481,6 +481,11 @@ class RealtimeAnalyzer:
         """
         self.classifier = classifier
         self.extractor = FeatureVectorExtractor(rate)
+        self.buffer = DataBuffer(100)
+        # self.buffer.push_multiple(np.zeros(100))
+        # plt.ion()
+        # self.line, = plt.plot(xrange(100), xrange(100))
+        # plt.draw()
 
     def push(self, samples):
         feature_vectors = self.extractor.push(samples)
@@ -488,6 +493,7 @@ class RealtimeAnalyzer:
             for vector in feature_vectors:
                 result = self.classifier.run(vector)
                 self._output(result)
+            # self._plot()
 
     def _output(self, result):
         output = 0
@@ -497,8 +503,13 @@ class RealtimeAnalyzer:
         if not math.isnan(output):
             scale = 20
             value = min(max(int(output * scale), 0), scale)
+            self.buffer.push(value)
             # sys.stdout.flush()
             print "[{0}{1}] {2}".format('#' * value, ' ' * (scale - value), output)
+
+    def _plot(self):
+        self.line.set_ydata(self.buffer.data)
+        plt.draw()
 
 
 VIRTUAL_BUFFER_SIZE = 1000

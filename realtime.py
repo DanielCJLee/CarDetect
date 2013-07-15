@@ -4,7 +4,7 @@ from datetime import datetime
 import pyaudio
 import time
 
-CHUNK = 1024
+CHUNK = 102400
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
