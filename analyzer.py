@@ -196,12 +196,12 @@ class FeatureVectorExtractor:
 
         for slice in slices:
             output_slice = []
-            prev_index = 0
-            for index in indexes:
-                part = slice[prev_index:index + 1]
+            prev_index = indexes[0]
+            for i in xrange(1, len(indexes)):
+                part = slice[prev_index:indexes[i] + 1]
                 average = sum(part) / len(part)
                 output_slice.append(average)
-                prev_index = index
+                prev_index = indexes[i]
             output.append(output_slice)
 
         output = np.array(output)
@@ -293,7 +293,7 @@ class FeatureVectorExtractor:
         """
         Zeros the frequencies below the specified frequency
         (or the next lowest present)
-        and returns the remaining higher frequencies.
+        and returns the remaining higher frequencies (data and labels)
         :param slices:
         """
         # Find the index to cut off at
@@ -306,12 +306,15 @@ class FeatureVectorExtractor:
         output = []
 
         for slice in slices:
-            new_slice = [EPSILON] * index
-            new_slice.extend(list(slice[index:]))
+            new_slice = slice[index:]
             output.append(new_slice)
 
+        new_freqs = freqs[index:]
+
         output = np.array(output)
-        return output
+        new_freqs = np.array(new_freqs)
+
+        return output, new_freqs
 
     def pairwise_differences(self, items):
         length = len(items)
@@ -343,6 +346,9 @@ class FeatureVectorExtractor:
         raw_slices = 10 * np.log10(raw_slices) + 60
         raw_slices = raw_slices.clip(0)
 
+        # High-pass filter
+        raw_slices, freqs = self.high_pass_filter(raw_slices, freqs, 500)
+
         # Add raw slices to buffer for use in calculating moving average
         self.buffers["raw_slices"].push_multiple(raw_slices)
 
@@ -360,9 +366,8 @@ class FeatureVectorExtractor:
             zero_crossing_rates.append(self.avg_zero_crossing_rate(section))
         self.buffers["zero_crossing_rates"].push_multiple(zero_crossing_rates)
 
-        # Calculate rolloff frequencies, with high-pass filter
-        filtered_slices = self.high_pass_filter(np.abs(raw_slices), freqs, 1000)
-        rolloff_freqs = self.all_rolloff_freq(freqs, filtered_slices)
+        # Calculate rolloff frequencies
+        rolloff_freqs = self.all_rolloff_freq(freqs, slices)
         rolloff_freqs /= np.amax(freqs)  # make a proportion of the maximum frequency
         self.buffers["rolloff_freqs"].push_multiple(rolloff_freqs)
 
