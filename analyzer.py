@@ -395,9 +395,9 @@ class FeatureVectorExtractor:
         vectors = []
         for i in xrange(n):
             vector = []
-            # vector.extend(slices_bins[i])
-            vector.extend(ratios[i])
-            # vector.append(zero_crossing_rates[i])
+            vector.extend(slices_bins[i])
+            # vector.extend(ratios[i])
+            vector.append(zero_crossing_rates[i])
             # vector.append(third_octave_autocorrelation[i])
             vector.append(rolloff_freqs[i])
             vector.append(magnitude[i])
