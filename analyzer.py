@@ -353,11 +353,9 @@ class FeatureVectorExtractor:
         self.buffers["thresholds"].push(threshold)
         slices = [slice]
 
-        # Calculate zero-crossing rates (in intervals of the FFT block size, w/ overlap)
-        zero_crossing_rates = []
-        for section in self._raw_data_in_slices(data):
-            zero_crossing_rates.append(self.avg_zero_crossing_rate(section))
-        self.buffers["zero_crossing_rates"].push_multiple(zero_crossing_rates)
+        # Calculate zero-crossing rate
+        zero_crossing_rate = self.avg_zero_crossing_rate(data)
+        self.buffers["zero_crossing_rates"].push(zero_crossing_rate)
 
         # Calculate rolloff frequencies
         rolloff_freqs = self.all_rolloff_freq(self.freqs, slices)
@@ -400,7 +398,7 @@ class FeatureVectorExtractor:
             vector = []
             # vector.extend(slices_bins[i])
             vector.extend(ratios[i])
-            vector.append(zero_crossing_rates[i])
+            vector.append(zero_crossing_rate)
             # vector.append(third_octave_autocorrelation[i])
             vector.append(stddev[i])
             vector.append(rolloff_freqs[i])
