@@ -363,14 +363,12 @@ class FeatureVectorExtractor:
 
         # Extract the third octave
         third_octave_indexes = self.find_indexes(self.freqs, [700, 1300])
-        third_octave = [slice[third_octave_indexes[0]:third_octave_indexes[1]] for slice in slices]
-        self.buffers["third_octave"].push_multiple(third_octave)
+        third_octave = slice[third_octave_indexes[0]:third_octave_indexes[1]]
+        self.buffers["third_octave"].push(third_octave)
 
         # Third octave autocorrelation
-        # third_octave_autocorrelation = []
-        # for slice in third_octave:
-        #     third_octave_autocorrelation.append(self.autocorrelation_coefficient(slice))
-        # self.buffers["third_octave_autocorrelation"].push_multiple(third_octave_autocorrelation)
+        # third_octave_autocorrelation = self.autocorrelation_coefficient(slice)
+        # self.buffers["third_octave_autocorrelation"].push(third_octave_autocorrelation)
 
         # Pairwise differences (ratio of magnitude) between frequency bins
         ratios = [self.pairwise_differences(slice_bins) for slice_bins in slices_bins]
