@@ -168,6 +168,7 @@ class FeatureVectorExtractor:
         self.fft = FFT(self.rate)
         self.original_freqs = self.fft.freqs
         self.freqs = self.high_pass_filter_freqs(self.original_freqs, 500)
+        self.bin_divisions_indexes = self.find_indexes(self.freqs, DIVISIONS)
 
     def nextpow2(self, num):
         return int(np.ceil(np.log2(num)))
@@ -198,22 +199,18 @@ class FeatureVectorExtractor:
             total = [sum(pair) for pair in zip(total, list_of_matrices[i])]
         return total
 
-    def freq_bins(self, freqs, slices, divisions):
-        # Divide slices into frequency bins, returns new slices
+    def freq_bins(self, slice):
+        # Divide slice into frequency bins, returns new slice
 
-        indexes = self.find_indexes(freqs, divisions)
+        indexes = self.bin_divisions_indexes
 
         output = []
-
-        for slice in slices:
-            output_slice = []
-            prev_index = indexes[0]
-            for i in xrange(1, len(indexes)):
-                part = slice[prev_index:indexes[i] + 1]
-                average = sum(part) / len(part)
-                output_slice.append(average)
-                prev_index = indexes[i]
-            output.append(output_slice)
+        prev_index = indexes[0]
+        for i in xrange(1, len(indexes)):
+            part = slice[prev_index:indexes[i] + 1]
+            average = sum(part) / len(part)
+            output.append(average)
+            prev_index = indexes[i]
 
         output = np.array(output)
 
@@ -360,8 +357,9 @@ class FeatureVectorExtractor:
         self.buffers["rolloff_freqs"].push(rolloff_freq)
 
         # Divide each slice into frequency bins
-        slices_bins = self.freq_bins(self.freqs, slices, DIVISIONS)
-        self.buffers["slices_bins"].push_multiple(slices_bins)
+        slice_bins = self.freq_bins(slice)
+        self.buffers["slices_bins"].push(slice_bins)
+        slices_bins = [slice_bins]  # TODO: Temporary variable
 
         # Extract the third octave
         third_octave_indexes = self.find_indexes(self.freqs, [700, 1300])
@@ -393,7 +391,7 @@ class FeatureVectorExtractor:
         vectors = []
         for i in xrange(1):
             vector = []
-            # vector.extend(slices_bins[i])
+            # vector.extend(slice_bins)
             vector.extend(ratios[i])
             vector.append(zero_crossing_rate)
             # vector.append(third_octave_autocorrelation[i])
