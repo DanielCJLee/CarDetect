@@ -162,7 +162,7 @@ class FeatureVectorExtractor:
         # }
         self.buffers = {name: DataBuffer() for name in
                         ["raw_slices", "slices", "zero_crossing_rates", "rolloff_freqs", "slices_bins",
-                         "third_octave", "averages"]}
+                         "third_octave", "averages", "thresholds"]}
 
         self.classifier = FeatureVectorBuffer()
         self.fft = FFT(self.rate)
@@ -272,7 +272,6 @@ class FeatureVectorExtractor:
         start = max(0, end - MOVING_AVERAGE_LENGTH)
         actual_length = end - start
         average = sum(raw_slices[start:end]) / actual_length
-        # TODO: Add "averages" buffer
         self.buffers["averages"].push(average)
 
         # Find the sliding minimum value in each frequency band as threshold
@@ -351,9 +350,9 @@ class FeatureVectorExtractor:
         # Normalize the slices for analysis purposes
         slice, threshold, average = self.normalize(raw_slice)
         self.buffers["slices"].push(slice)
-        self.buffers["thresholds"] = DataBuffer()
         self.buffers["thresholds"].push(threshold)
         slices = [slice]
+
         # Calculate zero-crossing rates (in intervals of the FFT block size, w/ overlap)
         zero_crossing_rates = []
         for section in self._raw_data_in_slices(data):
