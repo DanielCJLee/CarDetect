@@ -330,15 +330,6 @@ class FeatureVectorExtractor:
         corr = np.correlate(np.abs(series), np.abs(series2))
         return float(corr) / max(np.var(series), EPSILON) / 100
 
-    def fft(self, data):
-        # Apply Hamming window
-        window = np.hamming(len(data))
-        windowed_data = window * data
-
-        # Perform FFT on data
-        P = np.fft.fft(windowed_data)
-        return P.real
-
     def analyze(self, data):
         """
 
@@ -479,6 +470,42 @@ class FeatureVectorExtractor:
     def process_vector(self, vector):
         # print vector
         self.classifier.add_vector(vector)
+
+
+class FFT:
+    # FFT algorithm based on code from matplotlib
+    # Code simplified for use as a single real-valued FFT
+    # Used under a BSD compatible license
+    # Copyright (c) 2002-2009 John D. Hunter; All Rights Reserved
+
+    def __init__(self, rate):
+        self.rate = rate
+
+        frame_samples_length = int(float(FRAME_TIME_LENGTH) / float(1000) * float(self.rate))
+        self.fft_sample_length = int(2 ** self._nextpow2(frame_samples_length))
+        self.overlap_sample_length = int(0.3 * frame_samples_length)
+
+        self.numFreqs = self.fft_sample_length / 2 + 1
+        self.step = self.fft_sample_length - self.overlap_sample_length
+        self.windowVals = np.hanning(self.fft_sample_length)
+        self.freqs = float(self.rate) / self.fft_sample_length * np.arange(self.numFreqs)
+
+    def _nextpow2(self, num):
+        return int(np.ceil(np.log2(num)))
+
+    def run(self, x):
+        windowed_x = x * self.windowVals
+        fx = np.fft.fft(windowed_x, n=self.fft_sample_length)
+
+        fx = np.conjugate(fx[:self.numFreqs]) * fx[:self.numFreqs]
+
+        fx /= (np.abs(self.windowVals)**2).sum()
+        fx[1:-1] *= 2
+        fx /= self.rate
+
+        fx = fx.real
+
+        return fx
 
 
 class RealtimeAnalyzer:
