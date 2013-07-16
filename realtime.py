@@ -1,10 +1,12 @@
 import struct
-import analyzer
-from datetime import datetime
-import pyaudio
 import time
 
-CHUNK = 102400
+import pyaudio
+
+import analyzer
+
+
+CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
