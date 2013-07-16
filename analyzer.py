@@ -175,12 +175,6 @@ class FeatureVectorExtractor:
 
         return indexes
 
-    def list_sum(self, list_of_matrices):
-        total = list_of_matrices[0]
-        for i in xrange(1, len(list_of_matrices)):
-            total = [sum(pair) for pair in zip(total, list_of_matrices[i])]
-        return total
-
     def freq_bins(self, slice):
         # Divide slice into frequency bins, returns new slice
 
