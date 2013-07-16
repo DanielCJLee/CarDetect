@@ -381,22 +381,19 @@ class FeatureVectorExtractor:
         self.buffers["stddev"].push(stddev)
 
         # Create feature vectors
-        vectors = []
-        for i in xrange(1):
-            vector = []
-            # vector.extend(slice_bins)
-            vector.extend(ratios)
-            vector.append(zero_crossing_rate)
-            # vector.append(third_octave_autocorrelation)
-            vector.append(stddev)
-            vector.append(rolloff_freq)
-            vector.append(magnitude)
-            vector = np.array(vector)
-            vectors.append(vector)
-            self.process_vector(vector)
+        vector = []
+        # vector.extend(slice_bins)
+        vector.extend(ratios)
+        vector.append(zero_crossing_rate)
+        # vector.append(third_octave_autocorrelation)
+        vector.append(stddev)
+        vector.append(rolloff_freq)
+        vector.append(magnitude)
+        vector = np.array(vector)
+        self.process_vector(vector)
 
-        # Return vectors
-        return vectors
+        # Return vector
+        return vector
 
     def _raw_data_in_slices(self, data):
         num = int((len(data) - self.fft_sample_length) / self._step_length()) + 1
@@ -411,7 +408,7 @@ class FeatureVectorExtractor:
         vectors = []
         while self.audio_buffer.available():
             vector = self.analyze(self.audio_buffer.read())
-            vectors.extend(vector)
+            vectors.append(vector)
         return vectors
 
     def display(self, plot_filename=None, buffer_list=None):
