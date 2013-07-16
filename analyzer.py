@@ -166,6 +166,8 @@ class FeatureVectorExtractor:
 
         self.classifier = FeatureVectorBuffer()
         self.fft = FFT(self.rate)
+        self.original_freqs = self.fft.freqs
+        self.freqs = self.high_pass_filter_freqs(self.original_freqs, 500)
 
     def nextpow2(self, num):
         return int(np.ceil(np.log2(num)))
@@ -306,10 +308,7 @@ class FeatureVectorExtractor:
         :param slices:
         """
         # Find the index to cut off at
-        index = 0
-        length = len(freqs)
-        while freqs[index] < cutoff_frequency and index < length - 1:
-            index += 1
+        index = self.find_indexes(freqs, [cutoff_frequency])[0]
 
         # Perform the filtering
         output = []
@@ -318,12 +317,15 @@ class FeatureVectorExtractor:
             new_slice = slice[index:]
             output.append(new_slice)
 
-        new_freqs = freqs[index:]
-
         output = np.array(output)
-        new_freqs = np.array(new_freqs)
 
-        return output, new_freqs
+        return output
+
+    def high_pass_filter_freqs(self, freqs, cutoff_frequency):
+        index = self.find_indexes(freqs, [cutoff_frequency])[0]
+        new_freqs = freqs[index:]
+        new_freqs = np.array(new_freqs)
+        return new_freqs
 
     def pairwise_differences(self, items):
         length = len(items)
@@ -341,15 +343,13 @@ class FeatureVectorExtractor:
 
     def analyze(self, data):
         raw_slices = [self.fft.run(data)]
-        freqs = self.fft.freqs
-        n = len(raw_slices)  # number of slices in each of following sequences
 
         # Decibel scale
         raw_slices = 10 * np.log10(raw_slices) + 60
         raw_slices = raw_slices.clip(0)
 
         # High-pass filter
-        raw_slices, freqs = self.high_pass_filter(raw_slices, freqs, 500)
+        raw_slices = self.high_pass_filter(raw_slices, self.original_freqs, 500)
 
         # Add raw slices to buffer for use in calculating moving average
         self.buffers["raw_slices"].push_multiple(raw_slices)
@@ -369,16 +369,16 @@ class FeatureVectorExtractor:
         self.buffers["zero_crossing_rates"].push_multiple(zero_crossing_rates)
 
         # Calculate rolloff frequencies
-        rolloff_freqs = self.all_rolloff_freq(freqs, slices)
-        rolloff_freqs /= np.amax(freqs)  # make a proportion of the maximum frequency
+        rolloff_freqs = self.all_rolloff_freq(self.freqs, slices)
+        rolloff_freqs /= np.amax(self.freqs)  # make a proportion of the maximum frequency
         self.buffers["rolloff_freqs"].push_multiple(rolloff_freqs)
 
         # Divide each slice into frequency bins
-        slices_bins = self.freq_bins(freqs, slices, DIVISIONS)
+        slices_bins = self.freq_bins(self.freqs, slices, DIVISIONS)
         self.buffers["slices_bins"].push_multiple(slices_bins)
 
         # Extract the third octave
-        third_octave_indexes = self.find_indexes(freqs, [700, 1300])
+        third_octave_indexes = self.find_indexes(self.freqs, [700, 1300])
         third_octave = [slice[third_octave_indexes[0]:third_octave_indexes[1]] for slice in slices]
         self.buffers["third_octave"].push_multiple(third_octave)
 
@@ -405,7 +405,7 @@ class FeatureVectorExtractor:
 
         # Create feature vectors
         vectors = []
-        for i in xrange(n):
+        for i in xrange(1):
             vector = []
             # vector.extend(slices_bins[i])
             vector.extend(ratios[i])
