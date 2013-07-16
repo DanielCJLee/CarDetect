@@ -162,7 +162,7 @@ class FeatureVectorExtractor:
         # }
         self.buffers = {name: DataBuffer() for name in
                         ["raw_slices", "slices", "zero_crossing_rates", "rolloff_freqs", "slices_bins",
-                         "third_octave"]}
+                         "third_octave", "averages"]}
 
         self.classifier = FeatureVectorBuffer()
         self.fft = FFT(self.rate)
@@ -264,38 +264,29 @@ class FeatureVectorExtractor:
         rate = float(total) / len(sound_data)
         return rate
 
-    def normalize(self, slices):
-        number = len(slices)
+    def normalize(self, slice):
         raw_slices = np.array(self.buffers["raw_slices"].data)
-        averages = []
-        thresholds = []
-        length = len(raw_slices)
+        end = len(raw_slices)
 
-        for end in xrange(length - number + 1, length + 1):
-            # Take the moving average to smooth out the data
-            start = max(0, end - MOVING_AVERAGE_LENGTH)
-            actual_length = end - start
-            average = sum(raw_slices[start:end]) / actual_length
-            averages.append(average)
+        # Take the moving average to smooth out the data
+        start = max(0, end - MOVING_AVERAGE_LENGTH)
+        actual_length = end - start
+        average = sum(raw_slices[start:end]) / actual_length
+        # TODO: Add "averages" buffer
+        self.buffers["averages"].push(average)
 
-            # Find the sliding minimum value in each frequency band as threshold
-            start2 = max(0, len(averages) - MOVING_THRESHOLD_LENGTH)
-            possible_thresholds = np.array(averages[start2:]).T
-            threshold = []
-            for band in possible_thresholds:
-                threshold.append(np.amin(band))
-            thresholds.append(threshold)
+        # Find the sliding minimum value in each frequency band as threshold
+        averages = self.buffers["averages"].data
+        start2 = max(0, len(self.buffers["averages"].data) - MOVING_THRESHOLD_LENGTH)
+        possible_thresholds = np.array(averages[start2:]).T
+        threshold = []
+        for band in possible_thresholds:
+            threshold.append(np.amin(band))
 
-        assert len(averages) == number
-        assert len(thresholds) == number
-
-        averages = np.array(averages)
-        thresholds = np.array(thresholds)
-
-        new_slices = slices - thresholds  # normalize
+        new_slices = slice - threshold  # normalize
         new_slices = new_slices.clip(0)  # clip at threshold
         new_slices /= 10  # scale downwards
-        return new_slices, thresholds, averages
+        return new_slices, threshold, average
 
     def _step_length(self):
         return self.fft_sample_length - self.overlap_sample_length
@@ -354,14 +345,15 @@ class FeatureVectorExtractor:
         # Add raw slices to buffer for use in calculating moving average
         self.buffers["raw_slices"].push_multiple(raw_slices)
 
-        # Normalize the slices for analysis purposes
-        slices, thresholds, averages = self.normalize(raw_slices)
-        self.buffers["slices"].push_multiple(slices)
-        self.buffers["thresholds"] = DataBuffer()
-        self.buffers["thresholds"].push_multiple(thresholds)
-        self.buffers["averages"] = DataBuffer()
-        self.buffers["averages"].push_multiple(averages)
+        # TODO: Temporary variable for migration to single FFT
+        raw_slice = raw_slices[0]
 
+        # Normalize the slices for analysis purposes
+        slice, threshold, average = self.normalize(raw_slice)
+        self.buffers["slices"].push(slice)
+        self.buffers["thresholds"] = DataBuffer()
+        self.buffers["thresholds"].push(threshold)
+        slices = [slice]
         # Calculate zero-crossing rates (in intervals of the FFT block size, w/ overlap)
         zero_crossing_rates = []
         for section in self._raw_data_in_slices(data):
