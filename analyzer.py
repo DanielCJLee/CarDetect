@@ -234,9 +234,6 @@ class FeatureVectorExtractor:
         new_slices /= 10  # scale downwards
         return new_slices, threshold, average
 
-    def _step_length(self):
-        return self.fft_sample_length - self.overlap_sample_length
-
     def high_pass_filter(self, slices, freqs, cutoff_frequency):
         """
         Zeros the frequencies below the specified frequency
