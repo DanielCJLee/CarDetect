@@ -234,7 +234,7 @@ class FeatureVectorExtractor:
         new_slices /= 10  # scale downwards
         return new_slices, threshold, average
 
-    def high_pass_filter(self, slices, freqs, cutoff_frequency):
+    def high_pass_filter(self, slice, freqs, cutoff_frequency):
         """
         Zeros the frequencies below the specified frequency
         (or the next lowest present)
@@ -245,15 +245,9 @@ class FeatureVectorExtractor:
         index = self.find_indexes(freqs, [cutoff_frequency])[0]
 
         # Perform the filtering
-        output = []
+        new_slice = slice[index:]
 
-        for slice in slices:
-            new_slice = slice[index:]
-            output.append(new_slice)
-
-        output = np.array(output)
-
-        return output
+        return new_slice
 
     def high_pass_filter_freqs(self, freqs, cutoff_frequency):
         index = self.find_indexes(freqs, [cutoff_frequency])[0]
@@ -276,20 +270,17 @@ class FeatureVectorExtractor:
         return float(corr) / max(np.var(series), EPSILON) / 100
 
     def analyze(self, data):
-        raw_slices = [self.fft.run(data)]
+        raw_slice = self.fft.run(data)
 
         # Decibel scale
-        raw_slices = 10 * np.log10(raw_slices) + 60
-        raw_slices = raw_slices.clip(0)
+        raw_slice = 10 * np.log10(raw_slice) + 60
+        raw_slice = raw_slice.clip(0)
 
         # High-pass filter
-        raw_slices = self.high_pass_filter(raw_slices, self.original_freqs, 500)
+        raw_slice = self.high_pass_filter(raw_slice, self.original_freqs, 500)
 
         # Add raw slices to buffer for use in calculating moving average
-        self.buffers["raw_slices"].push_multiple(raw_slices)
-
-        # TODO: Temporary variable for migration to single FFT
-        raw_slice = raw_slices[0]
+        self.buffers["raw_slices"].push(raw_slice)
 
         # Normalize the slices for analysis purposes
         slice, threshold, average = self.normalize(raw_slice)
