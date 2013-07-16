@@ -252,9 +252,6 @@ class FeatureVectorExtractor:
             i += 1
         return i
 
-    def all_rolloff_freq(self, freqs, slices):
-        return np.array([freqs[self.slice_rolloff_freq(x)] for x in slices])
-
     def avg_zero_crossing_rate(self, sound_data):
         signs = np.sign(np.array(sound_data))
         total = 0
@@ -358,9 +355,9 @@ class FeatureVectorExtractor:
         self.buffers["zero_crossing_rates"].push(zero_crossing_rate)
 
         # Calculate rolloff frequencies
-        rolloff_freqs = self.all_rolloff_freq(self.freqs, slices)
-        rolloff_freqs /= np.amax(self.freqs)  # make a proportion of the maximum frequency
-        self.buffers["rolloff_freqs"].push_multiple(rolloff_freqs)
+        rolloff_freq = self.freqs[self.slice_rolloff_freq(slice)]
+        rolloff_freq /= np.amax(self.freqs)  # make a proportion of the maximum frequency
+        self.buffers["rolloff_freqs"].push(rolloff_freq)
 
         # Divide each slice into frequency bins
         slices_bins = self.freq_bins(self.freqs, slices, DIVISIONS)
@@ -401,7 +398,7 @@ class FeatureVectorExtractor:
             vector.append(zero_crossing_rate)
             # vector.append(third_octave_autocorrelation[i])
             vector.append(stddev[i])
-            vector.append(rolloff_freqs[i])
+            vector.append(rolloff_freq)
             vector.append(magnitude[i])
             vector = np.array(vector)
             vectors.append(vector)
