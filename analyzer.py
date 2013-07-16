@@ -165,6 +165,7 @@ class FeatureVectorExtractor:
                          "third_octave"]}
 
         self.classifier = FeatureVectorBuffer()
+        self.fft = FFT(self.rate)
 
     def nextpow2(self, num):
         return int(np.ceil(np.log2(num)))
@@ -339,10 +340,8 @@ class FeatureVectorExtractor:
         return float(corr) / max(np.var(series), EPSILON) / 100
 
     def analyze(self, data):
-        (Pxx, freqs, t) = mlab.specgram(x=data, NFFT=self.fft_sample_length, Fs=self.rate,
-                                        noverlap=self.overlap_sample_length)
-
-        raw_slices = Pxx.T  # transpose the power matrix into time slices
+        raw_slices = [self.fft.run(data)]
+        freqs = self.fft.freqs
         n = len(raw_slices)  # number of slices in each of following sequences
 
         # Decibel scale
