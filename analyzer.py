@@ -155,9 +155,6 @@ class FeatureVectorExtractor:
         self.freqs = self.high_pass_filter_freqs(self.original_freqs, 500)
         self.bin_divisions_indexes = self.find_indexes(self.freqs, DIVISIONS)
 
-    def nextpow2(self, num):
-        return int(np.ceil(np.log2(num)))
-
     def plot_spectrogram(self, bins, freqs, slices, logscale=False, axes=plt):
         power = slices.T
         if logscale:
