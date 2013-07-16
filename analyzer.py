@@ -192,29 +192,6 @@ class FeatureVectorExtractor:
 
         return output
 
-    def trim_outliers(self, data, num_std_devs=3):
-        data10 = np.log10(data)
-        sd10 = np.std(data10)
-        mean10 = np.average(data10)
-
-        lower_bound10 = mean10 - num_std_devs * sd10
-        upper_bound10 = mean10 + num_std_devs * sd10
-        lower_bound = 10 ** lower_bound10
-        upper_bound = 10 ** upper_bound10
-
-        output = []
-        for elem in data:
-            if elem > upper_bound:
-                new_elem = upper_bound
-            elif elem < lower_bound:
-                new_elem = lower_bound
-            else:
-                new_elem = elem
-            output.append(new_elem)
-        output = np.array(output)
-
-        return output
-
     def slice_rolloff_freq(self, slice, threshold=0.9):
         target = threshold * sum(slice)
         partial = 0.0
