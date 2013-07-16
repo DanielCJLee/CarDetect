@@ -59,6 +59,14 @@ class AudioBuffer:
             self.data = self.data[output_length + 1:]
             return output
 
+    def available(self):
+        return len(self.data) >= self.fft_sample_length
+
+    def read(self):
+        output = self.data[:self.fft_sample_length]
+        self.data = self.data[self.step:]
+        return output
+
 
 class DataBuffer:
     def __init__(self, length=float("inf")):
@@ -331,11 +339,6 @@ class FeatureVectorExtractor:
         return float(corr) / max(np.var(series), EPSILON) / 100
 
     def analyze(self, data):
-        """
-
-        :param data:
-        :return:
-        """
         (Pxx, freqs, t) = mlab.specgram(x=data, NFFT=self.fft_sample_length, Fs=self.rate,
                                         noverlap=self.overlap_sample_length)
 
@@ -429,9 +432,11 @@ class FeatureVectorExtractor:
 
     def push(self, samples):
         self.audio_buffer.push_samples(samples)
-        data = self.audio_buffer.pop_working_set()
-        if data:
-            return self.analyze(data)
+        vectors = []
+        while self.audio_buffer.available():
+            vector = self.analyze(self.audio_buffer.read())
+            vectors.extend(vector)
+        return vectors
 
     def display(self, plot_filename=None, buffer_list=None):
         if buffer_list is None:
