@@ -8,7 +8,6 @@ import inspect
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import mlab
 from pybrain.supervised import BackpropTrainer
 from pybrain.tools.shortcuts import buildNetwork
 from pybrain.datasets import SupervisedDataSet
@@ -162,7 +161,7 @@ class FeatureVectorExtractor:
         # }
         self.buffers = {name: DataBuffer() for name in
                         ["raw_slices", "slices", "zero_crossing_rates", "rolloff_freqs", "slices_bins",
-                         "third_octave", "averages", "thresholds"]}
+                         "third_octave", "averages", "thresholds", "ratios"]}
 
         self.classifier = FeatureVectorBuffer()
         self.fft = FFT(self.rate)
@@ -359,7 +358,6 @@ class FeatureVectorExtractor:
         # Divide each slice into frequency bins
         slice_bins = self.freq_bins(slice)
         self.buffers["slices_bins"].push(slice_bins)
-        slices_bins = [slice_bins]  # TODO: Temporary variable
 
         # Extract the third octave
         third_octave_indexes = self.find_indexes(self.freqs, [700, 1300])
@@ -371,9 +369,8 @@ class FeatureVectorExtractor:
         # self.buffers["third_octave_autocorrelation"].push(third_octave_autocorrelation)
 
         # Pairwise differences (ratio of magnitude) between frequency bins
-        ratios = [self.pairwise_differences(slice_bins) for slice_bins in slices_bins]
-        self.buffers["ratios"] = DataBuffer()
-        self.buffers["ratios"].push_multiple(ratios)
+        ratios = self.pairwise_differences(slice_bins)
+        self.buffers["ratios"].push(ratios)
 
         # Overall magnitude of sound
         magnitude = [sum(slice) / len(slice) for slice in slices]
@@ -390,9 +387,9 @@ class FeatureVectorExtractor:
         for i in xrange(1):
             vector = []
             # vector.extend(slice_bins)
-            vector.extend(ratios[i])
+            vector.extend(ratios)
             vector.append(zero_crossing_rate)
-            # vector.append(third_octave_autocorrelation[i])
+            # vector.append(third_octave_autocorrelation)
             vector.append(stddev[i])
             vector.append(rolloff_freq)
             vector.append(magnitude[i])
