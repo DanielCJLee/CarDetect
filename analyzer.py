@@ -161,7 +161,7 @@ class FeatureVectorExtractor:
         # }
         self.buffers = {name: DataBuffer() for name in
                         ["raw_slices", "slices", "zero_crossing_rates", "rolloff_freqs", "slices_bins",
-                         "third_octave", "averages", "thresholds", "ratios"]}
+                         "third_octave", "averages", "thresholds", "ratios", "magnitude"]}
 
         self.classifier = FeatureVectorBuffer()
         self.fft = FFT(self.rate)
@@ -373,9 +373,8 @@ class FeatureVectorExtractor:
         self.buffers["ratios"].push(ratios)
 
         # Overall magnitude of sound
-        magnitude = [sum(slice) / len(slice) for slice in slices]
-        self.buffers["magnitude"] = DataBuffer()
-        self.buffers["magnitude"].push_multiple(magnitude)
+        magnitude = np.average(slice)
+        self.buffers["magnitude"].push(magnitude)
 
         # Standard deviation of frequency spectrum
         stddev = [np.std(slice) for slice in slices]
@@ -392,7 +391,7 @@ class FeatureVectorExtractor:
             # vector.append(third_octave_autocorrelation)
             vector.append(stddev[i])
             vector.append(rolloff_freq)
-            vector.append(magnitude[i])
+            vector.append(magnitude)
             vector = np.array(vector)
             vectors.append(vector)
             self.process_vector(vector)
