@@ -131,9 +131,11 @@ class FeatureVectorBuffer(DataBuffer):
 class FeatureVectorExtractor:
     def __init__(self, rate):
         self.rate = rate
-        frame_samples_length = int(float(FRAME_TIME_LENGTH) / float(1000) * float(self.rate))
-        self.fft_sample_length = int(2 ** self.nextpow2(frame_samples_length))
-        self.overlap_sample_length = int(0.3 * frame_samples_length)
+
+        calculator = FFTSizeCalculator(rate)
+        self.fft_sample_length = calculator.fft_sample_length
+        self.overlap_sample_length = calculator.overlap_sample_length
+
         self.audio_buffer = AudioBuffer(fft_sample_length=self.fft_sample_length,
                                         overlap_sample_length=self.overlap_sample_length)
         # self.buffers = {
@@ -443,17 +445,14 @@ class FFT:
     def __init__(self, rate):
         self.rate = rate
 
-        frame_samples_length = int(float(FRAME_TIME_LENGTH) / float(1000) * float(self.rate))
-        self.fft_sample_length = int(2 ** self._nextpow2(frame_samples_length))
-        self.overlap_sample_length = int(0.3 * frame_samples_length)
+        calculator = FFTSizeCalculator(rate)
+        self.fft_sample_length = calculator.fft_sample_length
+        self.overlap_sample_length = calculator.overlap_sample_length
+        self.step = calculator.step
 
         self.numFreqs = self.fft_sample_length / 2 + 1
-        self.step = self.fft_sample_length - self.overlap_sample_length
         self.windowVals = np.hanning(self.fft_sample_length)
         self.freqs = float(self.rate) / self.fft_sample_length * np.arange(self.numFreqs)
-
-    def _nextpow2(self, num):
-        return int(np.ceil(np.log2(num)))
 
     def run(self, x):
         windowed_x = x * self.windowVals
@@ -468,6 +467,18 @@ class FFT:
         fx = fx.real
 
         return fx
+
+
+class FFTSizeCalculator:
+    def __init__(self, rate):
+        self.rate = rate
+        frame_samples_length = int(float(FRAME_TIME_LENGTH) / float(1000) * float(self.rate))
+        self.fft_sample_length = int(2 ** self._nextpow2(frame_samples_length))
+        self.overlap_sample_length = int(0.3 * frame_samples_length)
+        self.step = self.fft_sample_length - self.overlap_sample_length
+
+    def _nextpow2(self, num):
+        return int(np.ceil(np.log2(num)))
 
 
 class RealtimeAnalyzer:
