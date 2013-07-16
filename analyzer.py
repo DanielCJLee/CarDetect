@@ -35,28 +35,12 @@ class AudioBuffer:
         self.overlap_sample_length = overlap_sample_length
         self.step = fft_sample_length - overlap_sample_length
 
-    def push_samples(self, samples):
+    def push(self, samples):
         """
         Adds samples to end of buffer data.
         :param samples:
         """
         self.data.extend(samples)
-
-    def pop_working_set(self):
-        """
-        Returns a piece of the data for then performing FFT analysis.
-        Keeps the remainder of the data beyond the FFT sample interval.
-        :rtype : list
-        """
-        length = len(self.data)
-        if length < self.fft_sample_length:
-            return False
-        else:
-            count = int((length - self.fft_sample_length) / self.step)
-            output_length = self.fft_sample_length + count * self.step
-            output = self.data[:output_length + 1]
-            self.data = self.data[output_length + 1:]
-            return output
 
     def available(self):
         return len(self.data) >= self.fft_sample_length
@@ -404,7 +388,7 @@ class FeatureVectorExtractor:
             yield section
 
     def push(self, samples):
-        self.audio_buffer.push_samples(samples)
+        self.audio_buffer.push(samples)
         vectors = []
         while self.audio_buffer.available():
             vector = self.analyze(self.audio_buffer.read())
