@@ -411,11 +411,15 @@ class FFT:
         self.freqs = float(self.rate) / self.fft_sample_length * np.arange(self.numFreqs)
 
     def run(self, x):
+        assert len(x) == self.fft_sample_length
+
         windowed_x = x * self.windowVals
-        fx = np.fft.fft(windowed_x, n=self.fft_sample_length)
+        fx = np.fft.rfft(windowed_x)
 
-        fx = np.conjugate(fx[:self.numFreqs]) * fx[:self.numFreqs]
+        # Get square of magnitude of complex vector
+        fx = np.conjugate(fx) * fx
 
+        # Scaling and normalizing output
         fx /= (np.abs(self.windowVals)**2).sum()
         fx[1:-1] *= 2
         fx /= self.rate
