@@ -417,7 +417,7 @@ class FFT:
         fx = np.fft.rfft(windowed_x)
 
         # Get square of magnitude of complex vector
-        fx = np.conjugate(fx) * fx
+        fx = fx.real ** 2 + fx.imag ** 2
 
         # Scaling and normalizing output
         fx /= (np.abs(self.windowVals)**2).sum()
@@ -535,6 +535,7 @@ class FileAnalyzer(FileProcessor):
         results = []
         text = ""
         for vector in vectors:
+            print vector
             result = self.classifier.run(vector)
             text += ",".join([str(item) for item in vector]) + "," + ",".join([str(item) for item in result]) + "\n"
             results.append(result)
